@@ -45,6 +45,7 @@ runtime and fall back to vanilla vegetation. No hard dependency is required.
 - 0.1: world preset, terrain profile, hot springs, cave sanctums, ocean islands.
 - 0.2: macro-climate noise, connected trunk/tributary river valleys, depositional
   river banks and sparse humid-region karst arches.
-- 0.3: karst/mountain/volcanic terrain families and vehicle-route validation.
+- 0.3: regional mountain chains, rolling hills, volcanic calderas, river-cut
+  vehicle corridors and the `/nexuslandscape route_audit` slope sampler.
 - 0.4: mushroom realm and logical archipelago chains.
 - 0.5: cave ecology, spider territories, deep-dark horror pass.
