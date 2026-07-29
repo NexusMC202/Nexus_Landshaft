@@ -3,6 +3,8 @@ package dev.nexusmc.landscape;
 import dev.nexusmc.landscape.worldgen.CaveSanctumFeature;
 import dev.nexusmc.landscape.worldgen.FloatingIslandFeature;
 import dev.nexusmc.landscape.worldgen.HotSpringFeature;
+import dev.nexusmc.landscape.worldgen.HumidKarstArchFeature;
+import dev.nexusmc.landscape.worldgen.RiverBankFeature;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.levelgen.feature.Feature;
 import net.minecraft.world.level.levelgen.feature.configurations.NoneFeatureConfiguration;
@@ -24,6 +26,10 @@ public final class NexusLandscape {
         FEATURES.register("cave_sanctum", () -> new CaveSanctumFeature(NoneFeatureConfiguration.CODEC));
     public static final DeferredHolder<Feature<?>, Feature<NoneFeatureConfiguration>> FLOATING_ISLAND =
         FEATURES.register("floating_island", () -> new FloatingIslandFeature(NoneFeatureConfiguration.CODEC));
+    public static final DeferredHolder<Feature<?>, Feature<NoneFeatureConfiguration>> RIVER_BANK =
+        FEATURES.register("river_bank", () -> new RiverBankFeature(NoneFeatureConfiguration.CODEC));
+    public static final DeferredHolder<Feature<?>, Feature<NoneFeatureConfiguration>> HUMID_KARST_ARCH =
+        FEATURES.register("humid_karst_arch", () -> new HumidKarstArchFeature(NoneFeatureConfiguration.CODEC));
 
     public NexusLandscape(IEventBus modBus) {
         FEATURES.register(modBus);
