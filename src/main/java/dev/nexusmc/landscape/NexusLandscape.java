@@ -3,11 +3,14 @@ package dev.nexusmc.landscape;
 import dev.nexusmc.landscape.command.RouteAuditCommand;
 import dev.nexusmc.landscape.worldgen.CaveSanctumFeature;
 import dev.nexusmc.landscape.worldgen.CoralAtollFeature;
+import dev.nexusmc.landscape.worldgen.DeepDarkRiftFeature;
 import dev.nexusmc.landscape.worldgen.FloatingIslandFeature;
 import dev.nexusmc.landscape.worldgen.HotSpringFeature;
 import dev.nexusmc.landscape.worldgen.HumidKarstArchFeature;
 import dev.nexusmc.landscape.worldgen.MycelialGroveFeature;
+import dev.nexusmc.landscape.worldgen.RareFlowerGrottoFeature;
 import dev.nexusmc.landscape.worldgen.RiverBankFeature;
+import dev.nexusmc.landscape.worldgen.SpiderNestFeature;
 import dev.nexusmc.landscape.worldgen.VolcanicCalderaFeature;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.levelgen.feature.Feature;
@@ -42,6 +45,12 @@ public final class NexusLandscape {
         FEATURES.register("coral_atoll", () -> new CoralAtollFeature(NoneFeatureConfiguration.CODEC));
     public static final DeferredHolder<Feature<?>, Feature<NoneFeatureConfiguration>> MYCELIAL_GROVE =
         FEATURES.register("mycelial_grove", () -> new MycelialGroveFeature(NoneFeatureConfiguration.CODEC));
+    public static final DeferredHolder<Feature<?>, Feature<NoneFeatureConfiguration>> SPIDER_NEST =
+        FEATURES.register("spider_nest", () -> new SpiderNestFeature(NoneFeatureConfiguration.CODEC));
+    public static final DeferredHolder<Feature<?>, Feature<NoneFeatureConfiguration>> DEEP_DARK_RIFT =
+        FEATURES.register("deep_dark_rift", () -> new DeepDarkRiftFeature(NoneFeatureConfiguration.CODEC));
+    public static final DeferredHolder<Feature<?>, Feature<NoneFeatureConfiguration>> RARE_FLOWER_GROTTO =
+        FEATURES.register("rare_flower_grotto", () -> new RareFlowerGrottoFeature(NoneFeatureConfiguration.CODEC));
 
     public NexusLandscape(IEventBus modBus) {
         FEATURES.register(modBus);

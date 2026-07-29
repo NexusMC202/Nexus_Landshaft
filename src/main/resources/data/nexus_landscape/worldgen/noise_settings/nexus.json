@@ -79,7 +79,7 @@
                               "argument2": {
                                 "type": "minecraft:mul",
                                 "argument1": 5.0,
-                                "argument2": "minecraft:overworld/caves/entrances"
+                                "argument2": "nexus_landscape:caves/entrances"
                               }
                             },
                             "when_out_of_range": {
@@ -136,7 +136,7 @@
                                       }
                                     }
                                   },
-                                  "argument2": "minecraft:overworld/caves/entrances"
+                                  "argument2": "nexus_landscape:caves/entrances"
                                 },
                                 "argument2": {
                                   "type": "minecraft:add",

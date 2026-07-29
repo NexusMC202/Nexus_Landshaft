@@ -49,4 +49,5 @@ runtime and fall back to vanilla vegetation. No hard dependency is required.
   vehicle corridors and the `/nexuslandscape route_audit` slope sampler.
 - 0.4: clustered oceanic archipelago uplift, mountain islands, coral atolls,
   archipelago-bound floating islands and luminous mycelial groves.
-- 0.5: cave ecology, spider territories, deep-dark horror pass.
+- 0.5: sparse large 3D chambers, tree sanctums, live spider territories,
+  summon-capable Deep Dark rifts and rare flower grottos.

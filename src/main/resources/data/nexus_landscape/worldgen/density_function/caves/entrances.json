@@ -1,0 +1,5 @@
+{
+  "type": "minecraft:min",
+  "argument1": "minecraft:overworld/caves/entrances",
+  "argument2": "nexus_landscape:caves/large_chambers"
+}

@@ -1,0 +1,22 @@
+{
+  "type": "minecraft:range_choice",
+  "input": "minecraft:y",
+  "min_inclusive": -48.0,
+  "max_exclusive": 96.0,
+  "when_in_range": {
+    "type": "minecraft:clamp",
+    "input": {
+      "type": "minecraft:add",
+      "argument1": 0.58,
+      "argument2": {
+        "type": "minecraft:noise",
+        "noise": "nexus_landscape:cave_chambers",
+        "xz_scale": 0.72,
+        "y_scale": 1.05
+      }
+    },
+    "min": -1.0,
+    "max": 1.0
+  },
+  "when_out_of_range": 1.0
+}
