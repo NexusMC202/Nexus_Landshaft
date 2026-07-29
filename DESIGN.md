@@ -47,5 +47,6 @@ runtime and fall back to vanilla vegetation. No hard dependency is required.
   river banks and sparse humid-region karst arches.
 - 0.3: regional mountain chains, rolling hills, volcanic calderas, river-cut
   vehicle corridors and the `/nexuslandscape route_audit` slope sampler.
-- 0.4: mushroom realm and logical archipelago chains.
+- 0.4: clustered oceanic archipelago uplift, mountain islands, coral atolls,
+  archipelago-bound floating islands and luminous mycelial groves.
 - 0.5: cave ecology, spider territories, deep-dark horror pass.

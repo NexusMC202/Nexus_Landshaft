@@ -1,0 +1,6 @@
+{
+  "type": "neoforge:add_features",
+  "biomes": "#nexus_landscape:has_coral_atolls",
+  "features": "nexus_landscape:coral_atoll",
+  "step": "local_modifications"
+}

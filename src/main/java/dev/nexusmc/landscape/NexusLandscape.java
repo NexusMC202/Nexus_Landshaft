@@ -2,9 +2,11 @@ package dev.nexusmc.landscape;
 
 import dev.nexusmc.landscape.command.RouteAuditCommand;
 import dev.nexusmc.landscape.worldgen.CaveSanctumFeature;
+import dev.nexusmc.landscape.worldgen.CoralAtollFeature;
 import dev.nexusmc.landscape.worldgen.FloatingIslandFeature;
 import dev.nexusmc.landscape.worldgen.HotSpringFeature;
 import dev.nexusmc.landscape.worldgen.HumidKarstArchFeature;
+import dev.nexusmc.landscape.worldgen.MycelialGroveFeature;
 import dev.nexusmc.landscape.worldgen.RiverBankFeature;
 import dev.nexusmc.landscape.worldgen.VolcanicCalderaFeature;
 import net.minecraft.core.registries.Registries;
@@ -36,6 +38,10 @@ public final class NexusLandscape {
         FEATURES.register("humid_karst_arch", () -> new HumidKarstArchFeature(NoneFeatureConfiguration.CODEC));
     public static final DeferredHolder<Feature<?>, Feature<NoneFeatureConfiguration>> VOLCANIC_CALDERA =
         FEATURES.register("volcanic_caldera", () -> new VolcanicCalderaFeature(NoneFeatureConfiguration.CODEC));
+    public static final DeferredHolder<Feature<?>, Feature<NoneFeatureConfiguration>> CORAL_ATOLL =
+        FEATURES.register("coral_atoll", () -> new CoralAtollFeature(NoneFeatureConfiguration.CODEC));
+    public static final DeferredHolder<Feature<?>, Feature<NoneFeatureConfiguration>> MYCELIAL_GROVE =
+        FEATURES.register("mycelial_grove", () -> new MycelialGroveFeature(NoneFeatureConfiguration.CODEC));
 
     public NexusLandscape(IEventBus modBus) {
         FEATURES.register(modBus);

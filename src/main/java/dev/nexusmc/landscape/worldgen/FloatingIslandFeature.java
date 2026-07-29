@@ -22,7 +22,7 @@ public final class FloatingIslandFeature extends Feature<NoneFeatureConfiguratio
         RandomSource random = context.random();
         BlockPos origin = context.origin();
         int oceanFloor = level.getHeight(Heightmap.Types.OCEAN_FLOOR_WG, origin.getX(), origin.getZ());
-        if (oceanFloor > 58 || origin.getY() < 112) {
+        if (oceanFloor > 58 || origin.getY() < 112 || !nearArchipelagoEdge(level, origin)) {
             return false;
         }
 
@@ -60,6 +60,27 @@ public final class FloatingIslandFeature extends Feature<NoneFeatureConfiguratio
 
         addLandmarkTree(level, origin.above(), random);
         return true;
+    }
+
+    private static boolean nearArchipelagoEdge(WorldGenLevel level, BlockPos origin) {
+        int raisedNeighbors = 0;
+        int radius = 64;
+        for (int x = -1; x <= 1; x++) {
+            for (int z = -1; z <= 1; z++) {
+                if (x == 0 && z == 0) {
+                    continue;
+                }
+                int floor = level.getHeight(
+                    Heightmap.Types.OCEAN_FLOOR_WG,
+                    origin.getX() + x * radius,
+                    origin.getZ() + z * radius
+                );
+                if (floor >= 61 && floor <= 112) {
+                    raisedNeighbors++;
+                }
+            }
+        }
+        return raisedNeighbors >= 2;
     }
 
     private static void addLandmarkTree(WorldGenLevel level, BlockPos base, RandomSource random) {
