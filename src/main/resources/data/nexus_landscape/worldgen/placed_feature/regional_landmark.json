@@ -1,9 +1,9 @@
 {
-  "feature": "nexus_landscape:hot_spring",
+  "feature": "nexus_landscape:regional_landmark",
   "placement": [
     {
       "type": "minecraft:rarity_filter",
-      "chance": 40
+      "chance": 24
     },
     {
       "type": "minecraft:in_square"

@@ -1,0 +1,6 @@
+{
+  "type": "neoforge:add_features",
+  "biomes": "#nexus_landscape:has_mountain_arches",
+  "features": "nexus_landscape:mountain_arch",
+  "step": "local_modifications"
+}

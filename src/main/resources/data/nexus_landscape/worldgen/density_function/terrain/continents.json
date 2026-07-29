@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:clamp",
+  "input": {
+    "type": "minecraft:add",
+    "argument1": "minecraft:overworld/continents",
+    "argument2": {
+      "type": "minecraft:mul",
+      "argument1": 14.0,
+      "argument2": "nexus_landscape:terrain/island_signal"
+    }
+  },
+  "min": -1.2,
+  "max": 1.0
+}

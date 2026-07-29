@@ -49,5 +49,10 @@ runtime and fall back to vanilla vegetation. No hard dependency is required.
   vehicle corridors and the `/nexuslandscape route_audit` slope sampler.
 - 0.4: clustered oceanic archipelago uplift, mountain islands, coral atolls,
   archipelago-bound floating islands and luminous mycelial groves.
-- 0.5: sparse large 3D chambers, tree sanctums, live spider territories,
-  summon-capable Deep Dark rifts and rare flower grottos.
+- 0.5: sparse large 3D chambers, tree sanctums, spider territories, Deep Dark
+  rifts and rare flower grottos.
+- 0.6: Sodium 0.8.12-safe regional atmosphere using stable NeoForge rendering
+  events without linking to Sodium internals.
+- 0.7: unified river/biome signals, mountain-biome and island-biome alignment,
+  all-53-biome coverage audit, traversable mountain arches, biome-aware surface
+  landmarks and deadlock-free spider nest decoration.

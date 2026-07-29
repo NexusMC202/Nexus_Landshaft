@@ -1,0 +1,5 @@
+{
+  "type": "minecraft:mul",
+  "argument1": "nexus_landscape:terrain/island_chain_mask",
+  "argument2": "nexus_landscape:terrain/island_cluster_mask"
+}

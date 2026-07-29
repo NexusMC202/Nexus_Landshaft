@@ -3,21 +3,18 @@ package dev.nexusmc.landscape.worldgen;
 import com.mojang.serialization.Codec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
-import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.entity.SpawnerBlockEntity;
 import net.minecraft.world.level.levelgen.feature.Feature;
 import net.minecraft.world.level.levelgen.feature.FeaturePlaceContext;
 import net.minecraft.world.level.levelgen.feature.configurations.NoneFeatureConfiguration;
 
 /**
- * A web territory with a live spawner. If Nexus Mobs registers
- * nexus_mobs:giant_spider, the same generated nest automatically uses it.
+ * A web territory with a cocoon-like nest core. Mob spawning is deliberately
+ * kept out of chunk decoration: configuring a live spawner here can request
+ * neighbouring chunks while they are still generating and deadlock the
+ * integrated server.
  */
 public final class SpiderNestFeature extends Feature<NoneFeatureConfiguration> {
     public SpiderNestFeature(Codec<NoneFeatureConfiguration> codec) {
@@ -65,13 +62,20 @@ public final class SpiderNestFeature extends Feature<NoneFeatureConfiguration> {
     }
 
     private static void buildNestCore(WorldGenLevel level, BlockPos floor, RandomSource random) {
-        BlockPos spawnerPos = floor.above();
-        level.setBlock(floor, Blocks.MOSSY_COBBLESTONE.defaultBlockState(), 2);
-        level.setBlock(spawnerPos, Blocks.SPAWNER.defaultBlockState(), 2);
-        BlockEntity blockEntity = level.getBlockEntity(spawnerPos);
-        if (blockEntity instanceof SpawnerBlockEntity spawner) {
-            spawner.getSpawner().setEntityId(resolveSpider(), level.getLevel(), random, spawnerPos);
-            spawner.setChanged();
+        level.setBlock(floor, Blocks.CHISELED_DEEPSLATE.defaultBlockState(), 2);
+        for (int y = 1; y <= 3; y++) {
+            int radius = y == 2 ? 2 : 1;
+            for (int x = -radius; x <= radius; x++) {
+                for (int z = -radius; z <= radius; z++) {
+                    if (x * x + z * z > radius * radius + 1) {
+                        continue;
+                    }
+                    BlockPos cocoon = floor.offset(x, y, z);
+                    if (level.isEmptyBlock(cocoon)) {
+                        level.setBlock(cocoon, Blocks.COBWEB.defaultBlockState(), 2);
+                    }
+                }
+            }
         }
 
         for (int i = 0; i < 14; i++) {
@@ -82,11 +86,5 @@ public final class SpiderNestFeature extends Feature<NoneFeatureConfiguration> {
                     : Blocks.MOSSY_COBBLESTONE.defaultBlockState(), 2);
             }
         }
-    }
-
-    private static EntityType<?> resolveSpider() {
-        return BuiltInRegistries.ENTITY_TYPE
-            .getOptional(ResourceLocation.fromNamespaceAndPath("nexus_mobs", "giant_spider"))
-            .orElse(EntityType.CAVE_SPIDER);
     }
 }

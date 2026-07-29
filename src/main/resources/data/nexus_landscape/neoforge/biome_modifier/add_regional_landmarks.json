@@ -1,0 +1,6 @@
+{
+  "type": "neoforge:add_features",
+  "biomes": "#nexus_landscape:has_regional_landmarks",
+  "features": "nexus_landscape:regional_landmark",
+  "step": "local_modifications"
+}

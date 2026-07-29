@@ -4,11 +4,15 @@
   "min_inclusive": -0.05,
   "max_exclusive": 1.0,
   "when_in_range": {
-    "type": "minecraft:mul",
-    "argument1": -5.5,
+    "type": "minecraft:add",
+    "argument1": {
+      "type": "minecraft:mul",
+      "argument1": -4.2,
+      "argument2": "nexus_landscape:terrain/river_primary"
+    },
     "argument2": {
-      "type": "minecraft:max",
-      "argument1": "nexus_landscape:terrain/river_primary",
+      "type": "minecraft:mul",
+      "argument1": -1.25,
       "argument2": "nexus_landscape:terrain/river_tributaries"
     }
   },

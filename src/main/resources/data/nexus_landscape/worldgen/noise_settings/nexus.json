@@ -24,9 +24,9 @@
       "xz_scale": 1.0,
       "y_scale": 0.5
     },
-    "continents": "minecraft:overworld/continents",
+    "continents": "nexus_landscape:terrain/continents",
     "depth": "minecraft:overworld/depth",
-    "erosion": "minecraft:overworld/erosion",
+    "erosion": "nexus_landscape:terrain/erosion",
     "final_density": {
       "type": "minecraft:min",
       "argument1": {
@@ -251,7 +251,7 @@
       "shift_x": "minecraft:shift_x",
       "shift_y": 0.0,
       "shift_z": "minecraft:shift_z",
-      "xz_scale": 0.32,
+      "xz_scale": 0.48,
       "y_scale": 0.0
     },
     "vegetation": {
@@ -260,7 +260,7 @@
       "shift_x": "minecraft:shift_x",
       "shift_y": 0.0,
       "shift_z": "minecraft:shift_z",
-      "xz_scale": 0.3,
+      "xz_scale": 0.5,
       "y_scale": 0.0
     },
     "vein_gap": {

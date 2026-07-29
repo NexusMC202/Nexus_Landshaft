@@ -1,6 +1,7 @@
 package dev.nexusmc.landscape;
 
 import dev.nexusmc.landscape.command.RouteAuditCommand;
+import dev.nexusmc.landscape.diagnostics.WorldgenSurvey;
 import dev.nexusmc.landscape.worldgen.CaveSanctumFeature;
 import dev.nexusmc.landscape.worldgen.CoralAtollFeature;
 import dev.nexusmc.landscape.worldgen.DeepDarkRiftFeature;
@@ -8,6 +9,8 @@ import dev.nexusmc.landscape.worldgen.FloatingIslandFeature;
 import dev.nexusmc.landscape.worldgen.HotSpringFeature;
 import dev.nexusmc.landscape.worldgen.HumidKarstArchFeature;
 import dev.nexusmc.landscape.worldgen.MycelialGroveFeature;
+import dev.nexusmc.landscape.worldgen.MountainArchFeature;
+import dev.nexusmc.landscape.worldgen.RegionalLandmarkFeature;
 import dev.nexusmc.landscape.worldgen.RareFlowerGrottoFeature;
 import dev.nexusmc.landscape.worldgen.RiverBankFeature;
 import dev.nexusmc.landscape.worldgen.SpiderNestFeature;
@@ -51,10 +54,15 @@ public final class NexusLandscape {
         FEATURES.register("deep_dark_rift", () -> new DeepDarkRiftFeature(NoneFeatureConfiguration.CODEC));
     public static final DeferredHolder<Feature<?>, Feature<NoneFeatureConfiguration>> RARE_FLOWER_GROTTO =
         FEATURES.register("rare_flower_grotto", () -> new RareFlowerGrottoFeature(NoneFeatureConfiguration.CODEC));
+    public static final DeferredHolder<Feature<?>, Feature<NoneFeatureConfiguration>> MOUNTAIN_ARCH =
+        FEATURES.register("mountain_arch", () -> new MountainArchFeature(NoneFeatureConfiguration.CODEC));
+    public static final DeferredHolder<Feature<?>, Feature<NoneFeatureConfiguration>> REGIONAL_LANDMARK =
+        FEATURES.register("regional_landmark", () -> new RegionalLandmarkFeature(NoneFeatureConfiguration.CODEC));
 
     public NexusLandscape(IEventBus modBus) {
         FEATURES.register(modBus);
         NeoForge.EVENT_BUS.addListener(this::registerCommands);
+        NeoForge.EVENT_BUS.addListener(WorldgenSurvey::onServerStarted);
     }
 
     private void registerCommands(RegisterCommandsEvent event) {

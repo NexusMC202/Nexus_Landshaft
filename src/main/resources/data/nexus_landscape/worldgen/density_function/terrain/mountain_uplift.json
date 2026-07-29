@@ -1,9 +1,16 @@
 {
-  "type": "minecraft:mul",
-  "argument1": 2.1,
+  "type": "minecraft:add",
+  "argument1": {
+    "type": "minecraft:mul",
+    "argument1": 0.7,
+    "argument2": "nexus_landscape:terrain/mountain_signal"
+  },
   "argument2": {
     "type": "minecraft:mul",
-    "argument1": "nexus_landscape:terrain/mountain_region_mask",
-    "argument2": "nexus_landscape:terrain/mountain_ridges"
+    "argument1": 20.0,
+    "argument2": {
+      "type": "minecraft:square",
+      "argument": "nexus_landscape:terrain/mountain_signal"
+    }
   }
 }
