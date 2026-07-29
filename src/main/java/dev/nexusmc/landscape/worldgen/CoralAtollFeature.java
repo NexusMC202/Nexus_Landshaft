@@ -32,19 +32,26 @@ public final class CoralAtollFeature extends Feature<NoneFeatureConfiguration> {
     public boolean place(FeaturePlaceContext<NoneFeatureConfiguration> context) {
         WorldGenLevel level = context.level();
         RandomSource random = context.random();
-        BlockPos origin = context.origin();
+        BlockPos placementOrigin = context.origin();
+        int centerX = (placementOrigin.getX() & ~15) + 8;
+        int centerZ = (placementOrigin.getZ() & ~15) + 8;
+        BlockPos origin = new BlockPos(
+            centerX,
+            level.getHeight(Heightmap.Types.OCEAN_FLOOR_WG, centerX, centerZ),
+            centerZ
+        );
         int floorY = level.getHeight(
             Heightmap.Types.OCEAN_FLOOR_WG,
             origin.getX(),
             origin.getZ()
         );
-        if (floorY > 57) {
+        if (floorY < 46 || floorY > 58) {
             return false;
         }
 
-        int radiusX = 11 + random.nextInt(6);
-        int radiusZ = 9 + random.nextInt(5);
-        int sandY = 62;
+        int radiusX = 15 + random.nextInt(5);
+        int radiusZ = 13 + random.nextInt(5);
+        int sandY = 64;
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
         int changed = 0;
 
@@ -56,16 +63,19 @@ public final class CoralAtollFeature extends Feature<NoneFeatureConfiguration> {
                 int worldZ = origin.getZ() + z;
 
                 if (distance >= 0.45 && distance <= 1.08) {
-                    int top = sandY + (random.nextInt(6) == 0 ? 2 : random.nextInt(2));
+                    int top = sandY + (random.nextInt(7) == 0 ? 2 : random.nextInt(2));
                     int naturalFloor = level.getHeight(Heightmap.Types.OCEAN_FLOOR_WG, worldX, worldZ);
-                    for (int y = Math.max(naturalFloor, top - 4); y < top; y++) {
+                    if (naturalFloor < 45 || naturalFloor > 60) {
+                        continue;
+                    }
+                    for (int y = naturalFloor; y <= top; y++) {
                         cursor.set(worldX, y, worldZ);
-                        level.setBlock(cursor, y >= top - 2
+                        level.setBlock(cursor, y >= top - 3
                             ? Blocks.SAND.defaultBlockState()
                             : Blocks.SANDSTONE.defaultBlockState(), 2);
                     }
                     changed++;
-                } else if (distance > 1.08 && distance < 1.42 && random.nextInt(4) == 0) {
+                } else if (distance > 1.08 && distance < 1.5 && random.nextInt(3) == 0) {
                     int naturalFloor = level.getHeight(Heightmap.Types.OCEAN_FLOOR_WG, worldX, worldZ);
                     cursor.set(worldX, naturalFloor, worldZ);
                     BlockState coral = CORALS[random.nextInt(CORALS.length)].defaultBlockState();
@@ -73,6 +83,30 @@ public final class CoralAtollFeature extends Feature<NoneFeatureConfiguration> {
                 }
             }
         }
-        return changed > 30;
+        if (changed > 90) {
+            addPalm(level, origin.offset(radiusX / 2, sandY + 1 - origin.getY(), 0), random);
+            dev.nexusmc.landscape.diagnostics.WorldgenSurvey.recordFeature("coral_atoll");
+            return true;
+        }
+        return false;
+    }
+
+    private static void addPalm(WorldGenLevel level, BlockPos base, RandomSource random) {
+        int height = 6 + random.nextInt(4);
+        for (int y = 0; y < height; y++) {
+            level.setBlock(base.above(y), Blocks.JUNGLE_LOG.defaultBlockState(), 2);
+        }
+        BlockPos crown = base.above(height);
+        for (int x = -3; x <= 3; x++) {
+            for (int z = -3; z <= 3; z++) {
+                if (Math.abs(x) + Math.abs(z) <= 4) {
+                    level.setBlock(
+                        crown.offset(x, random.nextInt(2), z),
+                        Blocks.JUNGLE_LEAVES.defaultBlockState(),
+                        2
+                    );
+                }
+            }
+        }
     }
 }

@@ -1,0 +1,5 @@
+{
+  "type": "minecraft:add",
+  "argument1": "nexus_landscape:tectonic/noise/full_continents",
+  "argument2": 0
+}

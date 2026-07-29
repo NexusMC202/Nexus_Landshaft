@@ -56,3 +56,6 @@ runtime and fall back to vanilla vegetation. No hard dependency is required.
 - 0.7: unified river/biome signals, mountain-biome and island-biome alignment,
   all-53-biome coverage audit, traversable mountain arches, biome-aware surface
   landmarks and deadlock-free spider nest decoration.
+- 0.8: adapted self-contained Tectonic macro terrain, independent
+  ocean/elevation/river-aware climate fields, grounded hot springs and atolls,
+  larger rare floating islands, and asymmetric humid karst clusters.

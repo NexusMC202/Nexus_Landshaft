@@ -195,8 +195,20 @@ public final class WorldgenSurvey {
     private static String verifyBiomeCoverage(ServerLevel level) {
         StringBuilder report = new StringBuilder("Minecraft 1.21.1 Overworld biome source audit\n");
         Map<String, Integer> observed = new HashMap<>();
-        int range = 65_536;
-        int step = 128;
+        int range = Math.max(
+            8_192,
+            Math.min(
+                131_072,
+                environmentInteger("NEXUS_LANDSCAPE_BIOME_AUDIT_RANGE", 65_536)
+            )
+        );
+        int step = Math.max(
+            64,
+            Math.min(
+                1_024,
+                environmentInteger("NEXUS_LANDSCAPE_BIOME_AUDIT_STEP", 128)
+            )
+        );
         int[] sampleHeights = {-40, 8, 64, 96, 144};
         var biomeSource = level.getChunkSource().getGenerator().getBiomeSource();
         var sampler = level.getChunkSource().randomState().sampler();

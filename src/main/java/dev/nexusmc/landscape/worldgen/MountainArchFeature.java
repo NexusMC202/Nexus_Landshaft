@@ -24,7 +24,12 @@ public final class MountainArchFeature extends Feature<NoneFeatureConfiguration>
     public boolean place(FeaturePlaceContext<NoneFeatureConfiguration> context) {
         WorldGenLevel level = context.level();
         RandomSource random = context.random();
-        BlockPos origin = context.origin();
+        BlockPos placementOrigin = context.origin();
+        BlockPos origin = new BlockPos(
+            (placementOrigin.getX() & ~15) + 8,
+            placementOrigin.getY(),
+            (placementOrigin.getZ() & ~15) + 8
+        );
         boolean alongX = random.nextBoolean();
         int halfSpan = 10 + random.nextInt(5);
 

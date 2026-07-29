@@ -26,18 +26,28 @@ public final class VolcanicCalderaFeature extends Feature<NoneFeatureConfigurati
     public boolean place(FeaturePlaceContext<NoneFeatureConfiguration> context) {
         WorldGenLevel level = context.level();
         RandomSource random = context.random();
-        BlockPos origin = context.origin();
+        BlockPos placementOrigin = context.origin();
+        int centerX = (placementOrigin.getX() & ~15) + 8;
+        int centerZ = (placementOrigin.getZ() & ~15) + 8;
+        int centerY = level.getHeight(Heightmap.Types.WORLD_SURFACE_WG, centerX, centerZ);
+        BlockPos origin = new BlockPos(centerX, centerY, centerZ);
         if (!level.getFluidState(origin).isEmpty()
+            || level.getBlockState(origin.below()).isAir()
+            || origin.getY() <= level.getMinBuildHeight() + 4
             || origin.getY() > level.getMaxBuildHeight() - 32) {
             return false;
         }
 
-        int radius = 15 + random.nextInt(5);
-        int height = 13 + random.nextInt(6);
+        // Centering the feature in its placement chunk and keeping it below
+        // 13 blocks guarantees it touches at most the immediately adjacent
+        // chunks, which is safe during the FEATURES generation step.
+        int radius = 10 + random.nextInt(3);
+        int height = 11 + random.nextInt(5);
         int baseY = origin.getY() - 1;
         buildCone(level, origin, baseY, radius, height, random);
         carveCrater(level, origin, baseY, radius, height, random);
         addCooledFlow(level, origin, baseY, radius, random);
+        dev.nexusmc.landscape.diagnostics.WorldgenSurvey.recordFeature("volcanic_caldera");
         return true;
     }
 
@@ -113,7 +123,7 @@ public final class VolcanicCalderaFeature extends Feature<NoneFeatureConfigurati
         RandomSource random
     ) {
         double angle = random.nextDouble() * Math.PI * 2.0;
-        for (int step = 3; step <= radius + 8; step++) {
+        for (int step = 3; step <= radius + 3; step++) {
             int x = Mth.floor(Math.cos(angle) * step);
             int z = Mth.floor(Math.sin(angle) * step);
             int y = level.getHeight(
