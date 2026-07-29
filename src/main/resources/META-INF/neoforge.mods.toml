@@ -36,3 +36,10 @@ type="optional"
 versionRange="[0,)"
 ordering="AFTER"
 side="BOTH"
+
+[[dependencies.${mod_id}]]
+modId="sodium"
+type="optional"
+versionRange="[0.8.12,0.9)"
+ordering="AFTER"
+side="CLIENT"
