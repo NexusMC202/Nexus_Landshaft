@@ -1,0 +1,6 @@
+{
+  "type": "neoforge:add_features",
+  "biomes": "#nexus_landscape:has_cave_sanctums",
+  "features": "nexus_landscape:cave_sanctum",
+  "step": "vegetal_decoration"
+}

@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:add",
+  "argument1": "minecraft:overworld/sloped_cheese",
+  "argument2": {
+    "type": "minecraft:mul",
+    "argument1": 0.16,
+    "argument2": {
+      "type": "minecraft:noise",
+      "noise": "nexus_landscape:landmark_ridges",
+      "xz_scale": 0.32,
+      "y_scale": 0.0
+    }
+  }
+}

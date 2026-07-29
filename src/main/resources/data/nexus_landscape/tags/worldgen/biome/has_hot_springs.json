@@ -1,0 +1,15 @@
+{
+  "replace": false,
+  "values": [
+    "minecraft:meadow",
+    "minecraft:plains",
+    "minecraft:sunflower_plains",
+    "minecraft:cherry_grove",
+    "minecraft:taiga",
+    "minecraft:old_growth_pine_taiga",
+    "minecraft:old_growth_spruce_taiga",
+    "minecraft:windswept_forest",
+    "minecraft:windswept_hills",
+    "minecraft:wooded_badlands"
+  ]
+}

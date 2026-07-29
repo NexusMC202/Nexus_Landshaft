@@ -1,0 +1,27 @@
+{
+  "feature": "nexus_landscape:cave_sanctum",
+  "placement": [
+    {
+      "type": "minecraft:rarity_filter",
+      "chance": 56
+    },
+    {
+      "type": "minecraft:in_square"
+    },
+    {
+      "type": "minecraft:height_range",
+      "height": {
+        "type": "minecraft:uniform",
+        "max_inclusive": {
+          "absolute": 48
+        },
+        "min_inclusive": {
+          "absolute": -40
+        }
+      }
+    },
+    {
+      "type": "minecraft:biome"
+    }
+  ]
+}

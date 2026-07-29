@@ -1,0 +1,49 @@
+# Nexus Landscape — world language
+
+## Goals
+
+The terrain should create memorable routes, not only screenshots. Broad valleys,
+river terraces and ridge saddles are kept driveable for Aeronautics vehicles,
+while cliffs, arches and peaks form distant landmarks. Extreme terrain is
+clustered into regions so it does not turn the entire world into impassable noise.
+
+## Region families
+
+1. **Continental valleys** — wide rivers, floodplains, forest shelves and road-like
+   natural terraces.
+2. **Humid eastern highlands** — misty karst towers, arches, waterfalls and dense
+   vegetation; the planned East-Asian climate region.
+3. **Painted badlands** — layered mesas cut by seasonal streams, with broad
+   traversable basins.
+4. **Volcanic chains** — shield volcanoes, broken calderas, basalt lava fields and
+   geothermal springs.
+5. **Mycelial reaches** — giant mushroom groves, luminous hollows and coherent
+   island chains instead of isolated biome specks.
+6. **Ocean archipelagos** — flat coral islands, mountain islands, sea stacks and
+   rare floating mythic islands.
+
+## Cave grammar
+
+Caves have three scales: travel tunnels, chambers and landmark caverns. Landmark
+caverns may contain a daylight shaft with a large tree, an underground lake, rare
+flowers, or a spider-web territory hook. Deep-dark transitions become narrower,
+darker and more asymmetric before opening into ancient-city-scale chambers.
+
+## Reality anchors
+
+Small believable places make the fantastic terrain feel grounded: geothermal
+basins, mineral terraces, springs, river confluences, talus fields, erosion
+arches, sheltered flower pockets and cave skylights.
+
+## Compatibility
+
+Nature's Spirit is optional. Features resolve its plants by registry ID at
+runtime and fall back to vanilla vegetation. No hard dependency is required.
+
+## Delivery roadmap
+
+- 0.1: world preset, terrain profile, hot springs, cave sanctums, ocean islands.
+- 0.2: climate-region biome source and proper river network prototype.
+- 0.3: karst/mountain/volcanic terrain families and vehicle-route validation.
+- 0.4: mushroom realm and logical archipelago chains.
+- 0.5: cave ecology, spider territories, deep-dark horror pass.
