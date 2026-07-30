@@ -1,33 +1,14 @@
 {
-  "type": "minecraft:add",
-  "argument1": {
-    "type": "minecraft:add",
-    "argument1": {
-      "type": "minecraft:add",
-      "argument1": "nexus_landscape:tectonic/base_terrain",
-      "argument2": {
-        "type": "minecraft:mul",
-        "argument1": 0.38,
-        "argument2": "nexus_landscape:v2/continent/delta_from_legacy"
-      }
-    },
-    "argument2": {
-      "type": "minecraft:mul",
-      "argument1": 0.18,
-      "argument2": "nexus_landscape:v2/field/macro_uplift"
-    }
-  },
-  "argument2": {
-    "type": "minecraft:add",
-    "argument1": {
-      "type": "minecraft:mul",
-      "argument1": 0.1,
-      "argument2": "nexus_landscape:v2/field/landform_offset"
-    },
-    "argument2": {
-      "type": "minecraft:mul",
-      "argument1": -0.08,
-      "argument2": "nexus_landscape:v2/hydrology/carve"
-    }
-  }
+  "type": "nexus_landscape:analytical_terrain",
+  "channel": "density",
+  "continentalness": "nexus_landscape:v2/continent/base",
+  "temperature": "nexus_landscape:climate_temperature",
+  "humidity": "nexus_landscape:climate_humidity",
+  "warp_x": "nexus_landscape:v2/province_warp_x",
+  "warp_z": "nexus_landscape:v2/province_warp_z",
+  "macro": "nexus_landscape:v2/province_macro",
+  "detail": "nexus_landscape:v2/province_detail",
+  "ridge": "nexus_landscape:v2/province_ridge",
+  "volcanic": "nexus_landscape:v2/volcanic_arc",
+  "composition": "nexus_landscape:v2/composition"
 }

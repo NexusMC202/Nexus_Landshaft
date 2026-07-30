@@ -5,6 +5,7 @@ import dev.nexusmc.landscape.worldgen.v2.field.NexusV2FieldSampler;
 import dev.nexusmc.landscape.worldgen.v2.field.RegionalFieldMath;
 import dev.nexusmc.landscape.worldgen.v2.hydrology.HydrologyMath;
 import dev.nexusmc.landscape.worldgen.v2.hydrology.NexusV2HydrologySampler;
+import dev.nexusmc.landscape.worldgen.v2.hydrology.RiverWaterPass;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
@@ -12,6 +13,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
+import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -88,6 +91,10 @@ public final class WorldgenSurvey {
             writeMap(result.rhythmColors(), output.resolve("rhythm.png"));
             writeMap(result.hierarchyColors(), output.resolve("hierarchy.png"));
             writeMap(result.upliftColors(), output.resolve("macro-uplift.png"));
+            writeMap(
+                result.terrainErrorColors(),
+                output.resolve("analytical-terrain-error.png")
+            );
             Files.writeString(output.resolve("survey.txt"), result.report());
             RegionalAtlasResult atlas = surveyRegionalAtlas(server.overworld());
             writeMap(atlas.provinceColors(), output.resolve("province-atlas.png"));
@@ -96,6 +103,10 @@ public final class WorldgenSurvey {
             writeMap(atlas.hierarchyColors(), output.resolve("hierarchy-atlas.png"));
             writeMap(atlas.upliftColors(), output.resolve("macro-uplift-atlas.png"));
             writeMap(atlas.landformColors(), output.resolve("landform-atlas.png"));
+            writeMap(atlas.youngMountainColors(), output.resolve("young-fold-mountains-atlas.png"));
+            writeMap(atlas.oldMountainColors(), output.resolve("old-eroded-highlands-atlas.png"));
+            writeMap(atlas.plateauColors(), output.resolve("dry-plateau-atlas.png"));
+            writeMap(atlas.volcanicColors(), output.resolve("volcanic-belt-atlas.png"));
             writeMap(atlas.glacierColors(), output.resolve("glacier-atlas.png"));
             writeMap(atlas.canyonColors(), output.resolve("canyon-atlas.png"));
             writeMap(atlas.riverColors(), output.resolve("river-network-atlas.png"));
@@ -129,12 +140,23 @@ public final class WorldgenSurvey {
         int[][] rhythmColors = new int[size][size];
         int[][] hierarchyColors = new int[size][size];
         int[][] upliftColors = new int[size][size];
+        int[][] terrainErrorColors = new int[size][size];
         Map<String, Integer> biomeCounts = new HashMap<>();
         Map<String, Integer> provinceCounts = new HashMap<>();
         Map<String, Integer> moodCounts = new HashMap<>();
         Map<String, Integer> rhythmCounts = new HashMap<>();
         NexusV2FieldSampler regionalSampler =
             new NexusV2FieldSampler(level.getChunkSource().randomState());
+        NexusV2HydrologySampler hydrologySampler =
+            new NexusV2HydrologySampler(level.getChunkSource().randomState());
+        List<Double> terrainErrors = new ArrayList<>(size * size);
+        int riverSamples = 0;
+        int bedAboveSurface = 0;
+        int floatingWater = 0;
+        int buriedChannels = 0;
+        double riverBedDeltaSum = 0.0;
+        double riverBedDeltaMin = Double.POSITIVE_INFINITY;
+        double riverBedDeltaMax = Double.NEGATIVE_INFINITY;
         long heightSum = 0;
         long heightSquareSum = 0;
         long slopeSum = 0;
@@ -149,8 +171,17 @@ public final class WorldgenSurvey {
             int worldZ = centerZ - radiusBlocks + imageZ * SAMPLE_STEP;
             for (int imageX = 0; imageX < size; imageX++) {
                 int worldX = centerX - radiusBlocks + imageX * SAMPLE_STEP;
-                level.getChunk(worldX >> 4, worldZ >> 4);
+                var generatedChunk = level.getChunk(worldX >> 4, worldZ >> 4);
                 int height = level.getHeight(Heightmap.Types.WORLD_SURFACE, worldX, worldZ);
+                Heightmap.primeHeightmaps(
+                    generatedChunk,
+                    EnumSet.of(Heightmap.Types.WORLD_SURFACE_WG)
+                );
+                int actualWgY = generatedChunk.getHeight(
+                    Heightmap.Types.WORLD_SURFACE_WG,
+                    worldX,
+                    worldZ
+                ) - 1;
                 BlockPos surface = new BlockPos(worldX, height - 1, worldZ);
                 boolean water = level.getFluidState(surface).is(FluidTags.WATER);
                 ResourceLocation biome = level.registryAccess()
@@ -158,6 +189,13 @@ public final class WorldgenSurvey {
                     .getKey(level.getBiome(surface).value());
                 String biomeName = biome == null ? "minecraft:unknown" : biome.toString();
                 RegionalFieldMath.Sample regional = regionalSampler.sample(worldX, worldZ);
+                var analyticalTerrain =
+                    regionalSampler.analyticalTerrain(worldX, worldZ);
+                HydrologyMath.Sample hydrology =
+                    hydrologySampler.sample(worldX, worldZ);
+                double terrainError = Math.abs(
+                    analyticalTerrain.surfaceY() - actualWgY
+                );
                 RegionalFieldMath.Province province = regional.dominantProvince();
                 RegionalFieldMath.Mood mood = regional.dominantMood();
                 RegionalFieldMath.Rhythm rhythm = regional.rhythm();
@@ -177,6 +215,28 @@ public final class WorldgenSurvey {
                     new Color(20, 38, 48),
                     new Color(238, 238, 225)
                 );
+                terrainErrorColors[imageZ][imageX] = scalarColor(
+                    terrainError / 48.0,
+                    new Color(25, 93, 66),
+                    new Color(207, 53, 48)
+                );
+                terrainErrors.add(terrainError);
+                if (hydrology.mask() > 0.5) {
+                    riverSamples++;
+                    double bedDelta = actualWgY - hydrology.bedY();
+                    riverBedDeltaSum += bedDelta;
+                    riverBedDeltaMin = Math.min(riverBedDeltaMin, bedDelta);
+                    riverBedDeltaMax = Math.max(riverBedDeltaMax, bedDelta);
+                    if (hydrology.bedY() > actualWgY + 0.5) {
+                        bedAboveSurface++;
+                    }
+                    if (hydrology.waterY() > actualWgY + 2.5) {
+                        floatingWater++;
+                    }
+                    if (actualWgY - hydrology.bedY() > 18.0) {
+                        buriedChannels++;
+                    }
+                }
                 biomeCounts.merge(biomeName, 1, Integer::sum);
                 provinceCounts.merge(province.serializedName(), 1, Integer::sum);
                 moodCounts.merge(mood.serializedName(), 1, Integer::sum);
@@ -204,6 +264,15 @@ public final class WorldgenSurvey {
         int sampleCount = size * size;
         double mean = heightSum / (double) sampleCount;
         double variance = heightSquareSum / (double) sampleCount - mean * mean;
+        terrainErrors.sort(Double::compareTo);
+        double terrainMae = terrainErrors.stream()
+            .mapToDouble(Double::doubleValue)
+            .average()
+            .orElse(0.0);
+        double terrainP95 = terrainErrors.get(
+            Math.min(terrainErrors.size() - 1, (int)Math.floor(terrainErrors.size() * 0.95))
+        );
+        double terrainMax = terrainErrors.get(terrainErrors.size() - 1);
         return new SurveyResult(
             colors,
             provinceColors,
@@ -211,6 +280,7 @@ public final class WorldgenSurvey {
             rhythmColors,
             hierarchyColors,
             upliftColors,
+            terrainErrorColors,
             biomeCounts,
             provinceCounts,
             moodCounts,
@@ -222,7 +292,17 @@ public final class WorldgenSurvey {
             slopeSum / (double) slopeSamples,
             waterSamples * 100.0 / sampleCount,
             hierarchySum / sampleCount,
-            upliftSum / sampleCount
+            upliftSum / sampleCount,
+            terrainMae,
+            terrainP95,
+            terrainMax,
+            riverSamples,
+            riverSamples == 0 ? 0.0 : riverBedDeltaSum / riverSamples,
+            riverSamples == 0 ? 0.0 : riverBedDeltaMin,
+            riverSamples == 0 ? 0.0 : riverBedDeltaMax,
+            riverSamples == 0 ? 0.0 : bedAboveSurface * 100.0 / riverSamples,
+            riverSamples == 0 ? 0.0 : floatingWater * 100.0 / riverSamples,
+            riverSamples == 0 ? 0.0 : buriedChannels * 100.0 / riverSamples
         );
     }
 
@@ -233,6 +313,10 @@ public final class WorldgenSurvey {
         int[][] hierarchyColors = new int[REGIONAL_ATLAS_SIZE][REGIONAL_ATLAS_SIZE];
         int[][] upliftColors = new int[REGIONAL_ATLAS_SIZE][REGIONAL_ATLAS_SIZE];
         int[][] landformColors = new int[REGIONAL_ATLAS_SIZE][REGIONAL_ATLAS_SIZE];
+        int[][] youngMountainColors = new int[REGIONAL_ATLAS_SIZE][REGIONAL_ATLAS_SIZE];
+        int[][] oldMountainColors = new int[REGIONAL_ATLAS_SIZE][REGIONAL_ATLAS_SIZE];
+        int[][] plateauColors = new int[REGIONAL_ATLAS_SIZE][REGIONAL_ATLAS_SIZE];
+        int[][] volcanicColors = new int[REGIONAL_ATLAS_SIZE][REGIONAL_ATLAS_SIZE];
         int[][] glacierColors = new int[REGIONAL_ATLAS_SIZE][REGIONAL_ATLAS_SIZE];
         int[][] canyonColors = new int[REGIONAL_ATLAS_SIZE][REGIONAL_ATLAS_SIZE];
         int[][] riverColors = new int[REGIONAL_ATLAS_SIZE][REGIONAL_ATLAS_SIZE];
@@ -284,6 +368,26 @@ public final class WorldgenSurvey {
                     worldZ,
                     RegionalFieldMath.Channel.GLACIER_MASS
                 );
+                double youngMountains = sampler.channel(
+                    worldX,
+                    worldZ,
+                    RegionalFieldMath.Channel.YOUNG_MOUNTAINS
+                );
+                double oldMountains = sampler.channel(
+                    worldX,
+                    worldZ,
+                    RegionalFieldMath.Channel.OLD_MOUNTAINS
+                );
+                double plateau = sampler.channel(
+                    worldX,
+                    worldZ,
+                    RegionalFieldMath.Channel.PLATEAU
+                );
+                double volcanicMountains = sampler.channel(
+                    worldX,
+                    worldZ,
+                    RegionalFieldMath.Channel.VOLCANIC_MOUNTAINS
+                );
                 double canyon = sampler.channel(
                     worldX,
                     worldZ,
@@ -294,6 +398,26 @@ public final class WorldgenSurvey {
                     landform,
                     new Color(25, 31, 34),
                     new Color(239, 191, 93)
+                );
+                youngMountainColors[imageZ][imageX] = scalarColor(
+                    youngMountains,
+                    new Color(20, 25, 31),
+                    new Color(225, 236, 244)
+                );
+                oldMountainColors[imageZ][imageX] = scalarColor(
+                    oldMountains,
+                    new Color(29, 33, 28),
+                    new Color(153, 143, 111)
+                );
+                plateauColors[imageZ][imageX] = scalarColor(
+                    plateau,
+                    new Color(35, 27, 22),
+                    new Color(216, 119, 58)
+                );
+                volcanicColors[imageZ][imageX] = scalarColor(
+                    volcanicMountains,
+                    new Color(24, 21, 24),
+                    new Color(185, 67, 42)
                 );
                 glacierColors[imageZ][imageX] = scalarColor(
                     glacier,
@@ -342,6 +466,10 @@ public final class WorldgenSurvey {
             hierarchyColors,
             upliftColors,
             landformColors,
+            youngMountainColors,
+            oldMountainColors,
+            plateauColors,
+            volcanicColors,
             glacierColors,
             canyonColors,
             riverColors,
@@ -609,6 +737,7 @@ public final class WorldgenSurvey {
         int[][] rhythmColors,
         int[][] hierarchyColors,
         int[][] upliftColors,
+        int[][] terrainErrorColors,
         Map<String, Integer> biomeCounts,
         Map<String, Integer> provinceCounts,
         Map<String, Integer> moodCounts,
@@ -620,7 +749,17 @@ public final class WorldgenSurvey {
         double meanSlopePerFourBlocks,
         double waterPercent,
         double meanHierarchyStrength,
-        double meanMacroUplift
+        double meanMacroUplift,
+        double terrainMeanAbsoluteError,
+        double terrainP95Error,
+        double terrainMaximumError,
+        int riverDiagnosticSamples,
+        double riverBedDeltaMean,
+        double riverBedDeltaMin,
+        double riverBedDeltaMax,
+        double riverBedAboveSurfacePercent,
+        double riverFloatingWaterPercent,
+        double riverBuriedPercent
     ) {
         String report() {
             StringBuilder report = new StringBuilder();
@@ -631,7 +770,14 @@ public final class WorldgenSurvey {
                     + "slope.mean_per_4_blocks=%.2f%nwater.percent=%.2f%n"
                     + "biomes.unique=%d%nprovince.unique=%d%n"
                     + "mood.unique=%d%nrhythm.unique=%d%n"
-                    + "hierarchy.mean=%.4f%nmacro_uplift.mean=%.4f%n%n",
+                    + "hierarchy.mean=%.4f%nmacro_uplift.mean=%.4f%n"
+                    + "terrain_error.mae=%.3f%nterrain_error.p95=%.3f%n"
+                    + "terrain_error.max=%.3f%n"
+                    + "river.samples=%d%nriver_bed_delta.mean=%.3f%n"
+                    + "river_bed_delta.min=%.3f%nriver_bed_delta.max=%.3f%n"
+                    + "river_bed_above_surface.percent=%.3f%n"
+                    + "river_floating_water.percent=%.3f%n"
+                    + "river_buried.percent=%.3f%n%n",
                 minHeight,
                 maxHeight,
                 meanHeight,
@@ -643,7 +789,17 @@ public final class WorldgenSurvey {
                 moodCounts.size(),
                 rhythmCounts.size(),
                 meanHierarchyStrength,
-                meanMacroUplift
+                meanMacroUplift,
+                terrainMeanAbsoluteError,
+                terrainP95Error,
+                terrainMaximumError,
+                riverDiagnosticSamples,
+                riverBedDeltaMean,
+                riverBedDeltaMin,
+                riverBedDeltaMax,
+                riverBedAboveSurfacePercent,
+                riverFloatingWaterPercent,
+                riverBuriedPercent
             ));
             biomeCounts.entrySet().stream()
                 .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
@@ -656,6 +812,29 @@ public final class WorldgenSurvey {
             appendCounts(report, "provinces", provinceCounts);
             appendCounts(report, "moods", moodCounts);
             appendCounts(report, "rhythm", rhythmCounts);
+            RiverWaterPass.Counters riverCounters = RiverWaterPass.counters();
+            report.append(String.format(
+                Locale.ROOT,
+                "%nriver_water_pass:%nchannels.attempted=%d%n"
+                    + "channels.accepted=%d%nblocks.carved=%d%n"
+                    + "water_blocks.placed=%d%nsediment_blocks.placed=%d%n"
+                    + "rejected.terrain_mismatch=%d%n"
+                    + "rejected.bed_above_surface=%d%n"
+                    + "rejected.bed_too_deep=%d%n"
+                    + "rejected.cave_intersection=%d%n"
+                    + "out_of_bounds.attempts=%d%nneighbour_reads=%d%n",
+                riverCounters.channelsAttempted(),
+                riverCounters.channelsAccepted(),
+                riverCounters.blocksCarved(),
+                riverCounters.waterBlocksPlaced(),
+                riverCounters.sedimentBlocksPlaced(),
+                riverCounters.rejectedTerrainMismatch(),
+                riverCounters.rejectedBedAboveSurface(),
+                riverCounters.rejectedBedTooDeep(),
+                riverCounters.rejectedCaveIntersection(),
+                riverCounters.outOfBoundsAttempts(),
+                riverCounters.neighbourReads()
+            ));
             report.append(String.format(Locale.ROOT, "%nfeatures.placed:%n"));
             FEATURE_COUNTS.entrySet().stream()
                 .sorted(Map.Entry.comparingByKey())
@@ -692,6 +871,10 @@ public final class WorldgenSurvey {
         int[][] hierarchyColors,
         int[][] upliftColors,
         int[][] landformColors,
+        int[][] youngMountainColors,
+        int[][] oldMountainColors,
+        int[][] plateauColors,
+        int[][] volcanicColors,
         int[][] glacierColors,
         int[][] canyonColors,
         int[][] riverColors,

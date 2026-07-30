@@ -6,7 +6,7 @@ package dev.nexusmc.landscape.worldgen.v2.hydrology;
  * sink basins without reading generated chunks.
  */
 public final class HydrologyMath {
-    public static final int BASIN_SIZE = 2_048;
+    public static final int BASIN_SIZE = 768;
     private static final double NODE_JITTER = 0.31;
     private static final double BASE_HALF_WIDTH = 17.0;
 
@@ -17,7 +17,8 @@ public final class HydrologyMath {
         int centerCellX = Math.floorDiv(blockX, BASIN_SIZE);
         int centerCellZ = Math.floorDiv(blockZ, BASIN_SIZE);
         double bestDistance = Double.POSITIVE_INFINITY;
-        double bestWaterLevel = 63.0;
+        double bestBedY = 61.0;
+        double bestWaterY = 63.0;
         int bestOrder = 0;
         double bestFlowX = 0.0;
         double bestFlowZ = 1.0;
@@ -37,7 +38,8 @@ public final class HydrologyMath {
                     continue;
                 }
                 bestDistance = projection.distance;
-                bestWaterLevel = lerp(source.level, target.level, projection.t);
+                bestBedY = lerp(source.bedY, target.bedY, projection.t);
+                bestWaterY = lerp(source.waterY, target.waterY, projection.t);
                 bestSource = source;
                 bestTarget = target;
                 double tangentX = tangentX(curve, projection.t);
@@ -50,14 +52,20 @@ public final class HydrologyMath {
 
         if (bestSource != null) {
             bestOrder = streamOrder(bestSource, bestTarget, noise);
+            double localTerrainY = noise.terrainY(blockX, blockZ);
+            double maximumIncision = 4.5 + bestOrder * 1.5;
+            bestBedY = Math.max(bestBedY, localTerrainY - maximumIncision);
+            bestWaterY = bestBedY + 1.15 + bestOrder * 0.35;
         }
         double halfWidth = BASE_HALF_WIDTH + bestOrder * 7.0;
         double mask = 1.0 - smoothstep(halfWidth, halfWidth * 4.2, bestDistance);
         return new Sample(
             bestDistance,
+            bestDistance - BASE_HALF_WIDTH,
             clamp01(mask),
             bestOrder,
-            bestWaterLevel,
+            bestBedY,
+            bestWaterY,
             bestFlowX,
             bestFlowZ
         );
@@ -70,6 +78,7 @@ public final class HydrologyMath {
         double jitterZ = noise.layout(cellX * 0.731 - 43.0, cellZ * 0.731 + 29.0);
         double x = centerX + clamp(jitterX, -1.0, 1.0) * BASIN_SIZE * NODE_JITTER;
         double z = centerZ + clamp(jitterZ, -1.0, 1.0) * BASIN_SIZE * NODE_JITTER;
+        double terrainY = noise.terrainY(x, z);
         double regionalLevel = noise.elevation(x / 8_192.0, z / 8_192.0);
         double localLevel = noise.layout(
             cellX * 3.173 + cellZ * 0.137 + 101.0,
@@ -80,7 +89,20 @@ public final class HydrologyMath {
             -1.0,
             1.0
         );
-        return new Node(cellX, cellZ, x, z, 70.0 + levelNoise * 22.0);
+        double routingY = terrainY + levelNoise * 8.0;
+        double bedY = terrainY - 4.0 - Math.max(0.0, -levelNoise) * 3.0;
+        double waterY = bedY + 1.5;
+        return new Node(
+            canonicalNodeId(cellX, cellZ),
+            cellX,
+            cellZ,
+            x,
+            z,
+            terrainY,
+            routingY,
+            bedY,
+            waterY
+        );
     }
 
     public static Node downstream(Node source, NoiseSource noise) {
@@ -92,11 +114,12 @@ public final class HydrologyMath {
                     continue;
                 }
                 Node candidate = node(source.cellX + dx, source.cellZ + dz, noise);
-                if (candidate.level >= source.level - 0.35) {
+                if (candidate.routingY >= source.routingY - 0.35
+                    || candidate.bedY >= source.bedY - 0.15) {
                     continue;
                 }
                 double diagonalPenalty = dx != 0 && dz != 0 ? 1.2 : 0.0;
-                double score = candidate.level + diagonalPenalty;
+                double score = candidate.routingY + diagonalPenalty;
                 if (score < bestScore) {
                     best = candidate;
                     bestScore = score;
@@ -104,6 +127,118 @@ public final class HydrologyMath {
             }
         }
         return best;
+    }
+
+    public static NodeInfo nodeInfo(Node node, NoiseSource noise) {
+        Node downstream = downstream(node, noise);
+        Node terminal = node;
+        int steps = 0;
+        while (downstream != null && steps < 512) {
+            if (downstream.bedY >= terminal.bedY) {
+                throw new IllegalStateException(
+                    "Hydrology invariant violated: downstream bed is not lower"
+                );
+            }
+            terminal = downstream;
+            downstream = downstream(terminal, noise);
+            steps++;
+        }
+        if (steps == 512) {
+            throw new IllegalStateException("Hydrology trace exceeded bounded DAG depth");
+        }
+        Node immediate = downstream(node, noise);
+        TerminalReason reason = terminalReason(terminal, noise);
+        long accumulation = upstreamAccumulation(node, noise, 5);
+        return new NodeInfo(
+            node.id,
+            immediate == null ? NO_NODE : immediate.id,
+            terminal.id,
+            terminal.id,
+            streamOrder(
+                node,
+                immediate == null ? node : immediate,
+                noise
+            ),
+            accumulation,
+            node.bedY,
+            node.waterY,
+            immediate == null ? reason : TerminalReason.NONE
+        );
+    }
+
+    public static LakeProfile lakeProfile(Node node, NoiseSource noise) {
+        if (terminalReason(node, noise) != TerminalReason.LAKE) {
+            return null;
+        }
+        double selector = clamp01(
+            noise.layout(node.cellX * 7.13 + 311.0, node.cellZ * 5.97 - 173.0)
+                * 0.5 + 0.5
+        );
+        double radius = 72.0 + selector * 156.0;
+        double maxDepth = 4.0 + selector * 8.0;
+        return new LakeProfile(
+            node.id,
+            node.x,
+            node.z,
+            radius,
+            Math.PI * radius * radius,
+            node.waterY,
+            maxDepth,
+            upstreamAccumulation(node, noise, 5),
+            NO_NODE,
+            true
+        );
+    }
+
+    private static TerminalReason terminalReason(Node node, NoiseSource noise) {
+        if (downstream(node, noise) != null) {
+            return TerminalReason.NONE;
+        }
+        if (node.terrainY <= 64.5) {
+            return TerminalReason.OCEAN_OUTLET;
+        }
+        double selector = noise.layout(
+            node.cellX * 5.31 + 71.0,
+            node.cellZ * 4.79 - 109.0
+        );
+        long terminalHash = mix64(node.id ^ 0x6A09E667F3BCC909L);
+        if (node.terrainY < 78.0
+            && selector < 0.15
+            && Math.floorMod(terminalHash, 4L) == 1L) {
+            return TerminalReason.WETLAND_SINK;
+        }
+        if (node.terrainY < 180.0 && (terminalHash & 1L) == 0L) {
+            return TerminalReason.LAKE;
+        }
+        return TerminalReason.DETERMINISTIC_OVERFLOW_OUTLET;
+    }
+
+    private static long upstreamAccumulation(
+        Node node,
+        NoiseSource noise,
+        int remainingDepth
+    ) {
+        long total = 1L;
+        if (remainingDepth == 0) {
+            return total;
+        }
+        for (int dz = -1; dz <= 1; dz++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                if (dx == 0 && dz == 0) {
+                    continue;
+                }
+                Node candidate = node(node.cellX + dx, node.cellZ + dz, noise);
+                Node target = downstream(candidate, noise);
+                if (target != null && target.id == node.id) {
+                    total += upstreamAccumulation(
+                        candidate,
+                        noise,
+                        remainingDepth - 1
+                    );
+                }
+            }
+        }
+        return total;
     }
 
     private static int streamOrder(Node source, Node target, NoiseSource noise) {
@@ -122,7 +257,7 @@ public final class HydrologyMath {
                 }
             }
         }
-        double drop = source.level - target.level;
+        double drop = source.bedY - target.bedY;
         return Math.min(3, 1 + (incoming >= 2 ? 1 : 0) + (incoming >= 4 || drop > 16.0 ? 1 : 0));
     }
 
@@ -218,31 +353,89 @@ public final class HydrologyMath {
         return Math.max(min, Math.min(max, value));
     }
 
+    public static long canonicalNodeId(int cellX, int cellZ) {
+        return ((long)cellX << 32) ^ (cellZ & 0xFFFF_FFFFL);
+    }
+
+    private static long mix64(long value) {
+        value = (value ^ (value >>> 30)) * 0xBF58476D1CE4E5B9L;
+        value = (value ^ (value >>> 27)) * 0x94D049BB133111EBL;
+        return value ^ (value >>> 31);
+    }
+
+    public static final long NO_NODE = Long.MIN_VALUE;
+
     public interface NoiseSource {
         double layout(double x, double z);
 
         double tributary(double x, double z);
 
         double elevation(double x, double z);
+
+        double terrainY(double x, double z);
     }
 
     public record Sample(
         double distance,
+        double signedDistance,
         double mask,
         int order,
-        double waterLevel,
+        double bedY,
+        double waterY,
         double flowX,
         double flowZ
     ) {
+        public double waterLevel() {
+            return waterY;
+        }
     }
 
     public record Node(
+        long id,
         int cellX,
         int cellZ,
         double x,
         double z,
-        double level
+        double terrainY,
+        double routingY,
+        double bedY,
+        double waterY
     ) {
+    }
+
+    public record NodeInfo(
+        long canonicalNodeId,
+        long downstreamNodeId,
+        long basinId,
+        long outletId,
+        int streamOrder,
+        long upstreamAccumulation,
+        double bedElevation,
+        double waterElevation,
+        TerminalReason terminalReason
+    ) {
+    }
+
+    public record LakeProfile(
+        long basinId,
+        double centerX,
+        double centerZ,
+        double boundaryRadius,
+        double maximumArea,
+        double waterSurfaceY,
+        double maximumDepth,
+        long inflowAccumulation,
+        long outletId,
+        boolean closedBasin
+    ) {
+    }
+
+    public enum TerminalReason {
+        NONE,
+        OCEAN_OUTLET,
+        LAKE,
+        WETLAND_SINK,
+        DETERMINISTIC_OVERFLOW_OUTLET
     }
 
     private record Curve(

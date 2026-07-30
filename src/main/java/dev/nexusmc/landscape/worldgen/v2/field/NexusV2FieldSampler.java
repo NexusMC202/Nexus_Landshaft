@@ -3,6 +3,7 @@ package dev.nexusmc.landscape.worldgen.v2.field;
 import net.minecraft.world.level.levelgen.DensityFunction;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.synth.NormalNoise;
+import dev.nexusmc.landscape.worldgen.v2.terrain.AnalyticalTerrainMath;
 
 /**
  * Diagnostic and placement view of the same regional math used by
@@ -55,6 +56,20 @@ public final class NexusV2FieldSampler {
         Inputs inputs = inputs(blockX, blockZ);
         return RegionalFieldMath.compute(
             channel,
+            inputs.continentalness,
+            inputs.temperature,
+            inputs.humidity,
+            inputs.macro,
+            inputs.detail,
+            inputs.ridge,
+            inputs.volcanic,
+            inputs.composition
+        );
+    }
+
+    public AnalyticalTerrainMath.Sample analyticalTerrain(int blockX, int blockZ) {
+        Inputs inputs = inputs(blockX, blockZ);
+        return AnalyticalTerrainMath.sample(
             inputs.continentalness,
             inputs.temperature,
             inputs.humidity,

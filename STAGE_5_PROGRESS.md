@@ -1,51 +1,122 @@
-# Stage 5 progress — landforms and hydrology
+# Stage 5 progress — landforms, hydrology and glacial integration
 
-Status: **foundation integrated, surface-water pass not accepted yet**.
+Status: **partially working; Stage 5 is not accepted or complete**.
+Stages 6–10 have not been started.
 
 ## Implemented
 
-- Four distinct relief families are now derived from the V2 regional fields:
-  young fold mountains, old eroded highlands, dry plateaus, and volcanic belts.
-- Glacier mass, canyon incision, coast weight, and a bounded composite
-  `landform_offset` are available from the same deterministic field math.
-- `landform_offset` is connected to both V2 terrain density paths.
-- A custom `nexus_landscape:hydrology_field` density function and three
-  seed-dependent hydrology noises are registered.
-- The drainage prototype uses canonical jittered watershed nodes. Each node
-  selects one strictly lower neighbour, so edges cannot flow uphill and
-  multiple tributaries can converge on the same sink or trunk.
-- River masks are chunk-order independent and are cached in 2D before the
-  vertical density gradient is applied.
-- Diagnostics now export landform, glacier, canyon, river mask, river order,
-  and river water-level atlases.
+- A single `AnalyticalTerrainMath` envelope now supplies:
+  terrain density, diagnostic surface Y, hydrology terrain Y, river bed
+  calculation and river-water validation.
+- The envelope explicitly composes continent base, province uplift, active
+  landform offset, broad valley, canyon incision, glacier carve and bounded
+  regional erosion.
+- Hydrology nodes now expose canonical ID, downstream ID, basin/outlet ID,
+  stream order, bounded upstream accumulation, bed Y, water Y and terminal
+  reason.
+- Allowed terminal reasons are represented: ocean outlet, bounded lake,
+  wetland sink and deterministic overflow outlet.
+- Lake terminals have a bounded profile with center, boundary radius, maximum
+  area/depth, water surface, inflow and closed/outlet state.
+- River centerlines use canonical jittered nodes and curved segments. Signed
+  distance, order, bed and water fields are deterministic at negative
+  coordinates and chunk boundaries.
+- `RiverWaterPass` writes only to the supplied current `ChunkAccess`. It carves
+  confirmed channels, places water, gravel/sand/clay sediment and rejects
+  terrain mismatches or unrelated cave intersections.
+- River pass sampling was reduced to a deterministic 5×5 grid per chunk with
+  local interpolation. Canonical node terrain samples are cached by absolute
+  coordinate.
+- Diagnostics export analytical terrain error, river bed/water/order, canyon,
+  glacier, composite landform and four separate mountain-family atlases.
+- A GitHub Actions workflow now defines Java 21 setup, JSON validation and a
+  clean Gradle build including deterministic/seam tests.
 
-## Verification
+## Verified locally
 
-- Synthetic regional coverage: 9 provinces, 8 moods, 6 active landform
-  channels.
-- Dramatic rhythm share: 11.37%, below the 35% composition ceiling.
-- Hydrology: 6,110 chunk-boundary continuity checks, 4,063 strictly downhill
-  drainage edges, and 201 convergent watershed nodes.
-- JSON validation: all resource JSON files parse.
-- A fresh NeoForge world `nexus-v2-stage5-smoke-c` reached `Done` in 25.057 s,
-  completed the survey, saved all dimensions, and emitted no registry,
-  datapack, cascading-worldgen, exception, or deadlock errors.
-- The 49,152 × 49,152 block atlas reports a river-mask coverage of 5.81%.
+- Framework-free field tests:
+  - 9 synthetic provinces;
+  - 8 moods;
+  - 6 active landform channels;
+  - dramatic share 11.37%;
+  - 6,110 chunk-boundary seam checks;
+  - 4,211 strictly downhill node edges;
+  - 156 confluences;
+  - bounded terminal/lake profiles;
+  - 664 reverse-order and four-thread deterministic requests.
+- Fresh world `nexus-v2-stage5-envelope-smoke-d`:
+  - analytical terrain MAE 2.549 blocks;
+  - P95 21.633 blocks;
+  - maximum error 36.720 blocks.
+- Confirmed river location for seed `240802`, center `X=-3040 Z=-4576`:
+  - 831 river samples;
+  - analytical terrain MAE 1.328 blocks;
+  - P95 1.954 blocks;
+  - bed depth 1.932–9.039 blocks, mean 6.036;
+  - bed above surface 0%;
+  - floating water 0%;
+  - buried channel 0%.
+- Fresh world `nexus-v2-stage5-envelope-smoke-g`:
+  - 18,757 channel columns attempted;
+  - 18,435 accepted before the targeted river-area extension;
+  - 85,674 blocks carved;
+  - 34,455 water blocks placed;
+  - 36,870 sediment blocks placed;
+  - 322 cave intersections rejected;
+  - neighbour reads 0.
+- No registry, datapack, cascading-worldgen, deadlock or crash error was found
+  in the accepted smoke logs.
 
-## Not accepted as complete
+## Visually inspected
 
-The smoke-test center is a high mountain area (surface Y 196–261) and contains
-no surface water. The graph is deterministic and connected locally, but its
-water-level model is not yet coupled to the actual terrain envelope. Therefore
-Stage 5 must not be called complete until:
+- The analytical terrain error map.
+- The regional river-network, order and water-level atlases.
+- The local generated survey map at `X=-3040 Z=-4576`.
+- The current network is less lattice-like than the first prototype, but short
+  angular branches and sink-star patterns are still visible in some regions.
 
-1. river elevation follows sampled macro terrain while remaining downhill;
-2. sinks become bounded lakes or receive a deterministic overflow outlet;
-3. a chunk-local water/sediment pass fills accepted channels without neighbour
-   reads or floating water;
-4. several fresh seeds show visible rivers in lowlands and sensible headwaters
-   in mountains;
-5. the watershed atlas loses remaining lattice-like short segments.
+## Partially working
 
-The current code is a working, crash-free foundation for that calibration, not
-the final visual result.
+- Terrain-following river beds work in the verified lowland river area, but
+  continuous downhill behavior between nodes still needs a centerline-profile
+  metric rather than only the strict node-edge test.
+- Lake metadata is bounded and deterministic, but lake basins are not yet
+  carved/filled by a dedicated pass.
+- Deterministic overflow is represented as a terminal outlet, but a physical
+  overflow channel to the next basin has not been generated.
+- The four mountain families have separate fields/maps, but shape metrics and
+  in-game examples for each family are incomplete.
+- Glacier mass affects terrain carve, but it is not yet a complete glacier.
+- CI workflow exists locally; it must not be reported as passing until the
+  pushed GitHub Actions run actually completes successfully.
+
+## Not implemented
+
+- Priority-flood/breach geometry for physical overflow channels.
+- Lake water and bounded lake shoreline/sediment pass.
+- Raw-graph versus final-warped-centerline map pair and full segment/angle/
+  parallel-channel metrics.
+- Full ridge continuity, orientation, saddle, terrace, slope, peak isolation,
+  canyon continuity and caldera-circularity metrics.
+- Complete glacier accumulation zone, downhill ice flow, cirque, tongue,
+  U-valley, moraine, glacial-lake eligibility and altitude vegetation bands.
+- Five-seed acceptance suite and later 20-seed suite.
+- Required vanilla screenshots and atlas crops for every acceptance case.
+
+## Failed criteria / known defects
+
+- Stage 5 cannot be accepted from one seed and one confirmed river.
+- P95/max analytical terrain error remains high in the original mountainous
+  smoke area, largely where cave/terrain final-density modifications diverge
+  from the envelope; this requires classification and reduction.
+- River pass had 46 vertically collapsed columns classified as out-of-bounds
+  in one targeted run. The classification has been corrected to terrain
+  mismatch, but a fresh run must prove `out_of_bounds.attempts=0`.
+- Physical lake and overflow water are absent.
+- Lattice/parallel/angle acceptance metrics do not yet exist.
+- No shader-free in-game screenshot has yet been captured for the confirmed
+  river coordinate.
+- GitHub CI has not yet run on this revision.
+
+River-mask coverage is diagnostic context only and is not treated as evidence
+of river quality.

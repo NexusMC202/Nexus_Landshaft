@@ -2,7 +2,15 @@ package dev.nexusmc.landscape.worldgen.v2.field;
 
 import dev.nexusmc.landscape.worldgen.v2.hydrology.HydrologyMath;
 import java.util.EnumSet;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 /**
  * Framework-free verification entry point, invoked by Gradle's
@@ -19,6 +27,7 @@ public final class RegionalFieldMathSelfTest {
         verifySyntheticCoverageAndRhythmBudget();
         verifyLandformChannels();
         verifyHydrologyGraph();
+        verifyHydrologyRequestOrderAndThreads();
         System.out.println("RegionalFieldMathSelfTest: PASS");
     }
 
@@ -175,6 +184,20 @@ public final class RegionalFieldMathSelfTest {
                     Math.abs(left.mask() - right.mask()) < 0.08,
                     "river mask discontinuity at chunk boundary"
                 );
+                require(
+                    Math.abs(left.signedDistance() - right.signedDistance()) <= 1.05,
+                    "signed river distance discontinuity at chunk boundary"
+                );
+                if (left.mask() > 0.2 && right.mask() > 0.2) {
+                    require(
+                        Math.abs(left.bedY() - right.bedY()) < 3.0,
+                        "river bed discontinuity at chunk boundary"
+                    );
+                    require(
+                        Math.abs(left.waterY() - right.waterY()) < 3.0,
+                        "river water discontinuity at chunk boundary"
+                    );
+                }
                 seamChecks++;
             }
         }
@@ -186,7 +209,7 @@ public final class RegionalFieldMathSelfTest {
                 HydrologyMath.Node target = HydrologyMath.downstream(source, noise);
                 if (target != null) {
                     require(
-                        target.level() < source.level(),
+                        target.bedY() < source.bedY(),
                         "drainage edge flows uphill"
                     );
                     downhillChecks++;
@@ -196,6 +219,8 @@ public final class RegionalFieldMathSelfTest {
         require(downhillChecks >= 20, "insufficient downhill river checks: " + downhillChecks);
 
         int convergences = 0;
+        int terminalNodes = 0;
+        int lakeNodes = 0;
         for (int cellZ = -12; cellZ <= 12; cellZ++) {
             for (int cellX = -12; cellX <= 12; cellX++) {
                 int incoming = 0;
@@ -217,14 +242,44 @@ public final class RegionalFieldMathSelfTest {
                 if (incoming >= 2) {
                     convergences++;
                 }
+                HydrologyMath.Node node = HydrologyMath.node(cellX, cellZ, noise);
+                HydrologyMath.NodeInfo info = HydrologyMath.nodeInfo(node, noise);
+                require(
+                    info.canonicalNodeId() == HydrologyMath.canonicalNodeId(cellX, cellZ),
+                    "canonical node id mismatch"
+                );
+                if (info.downstreamNodeId() == HydrologyMath.NO_NODE) {
+                    terminalNodes++;
+                    require(
+                        info.terminalReason() != HydrologyMath.TerminalReason.NONE,
+                        "terminal node has no reason"
+                    );
+                    if (info.terminalReason() == HydrologyMath.TerminalReason.LAKE) {
+                        lakeNodes++;
+                        HydrologyMath.LakeProfile lake =
+                            HydrologyMath.lakeProfile(node, noise);
+                        require(lake != null, "lake terminal has no bounded profile");
+                        require(lake.maximumDepth() <= 12.0, "lake depth is unbounded");
+                        require(lake.maximumArea() > 0.0, "lake area is empty");
+                    }
+                } else {
+                    require(
+                        info.terminalReason() == HydrologyMath.TerminalReason.NONE,
+                        "non-terminal node has terminal reason"
+                    );
+                }
             }
         }
         require(convergences >= 10, "drainage graph has too few convergences: " + convergences);
+        require(terminalNodes > 0, "drainage graph has no bounded terminals");
+        require(lakeNodes > 0, "drainage graph has no bounded lake profile");
         System.out.printf(
-            "hydrology seams=%d downhillChecks=%d convergences=%d%n",
+            "hydrology seams=%d downhillChecks=%d convergences=%d terminals=%d lakes=%d%n",
             seamChecks,
             downhillChecks,
-            convergences
+            convergences,
+            terminalNodes,
+            lakeNodes
         );
     }
 
@@ -272,7 +327,94 @@ public final class RegionalFieldMathSelfTest {
                 return Math.sin(x * 0.43 + z * 0.29) * 0.62
                     + Math.cos(z * 0.17 - x * 0.11) * 0.24;
             }
+
+            @Override
+            public double terrainY(double x, double z) {
+                return 130.0
+                    + Math.sin(x / 8_000.0 + z / 13_000.0) * 34.0
+                    + Math.cos(z / 5_500.0 - x / 9_000.0) * 18.0;
+            }
         };
+    }
+
+    private static void verifyHydrologyRequestOrderAndThreads() {
+        HydrologyMath.NoiseSource noise = syntheticHydrologyNoise();
+        List<int[]> coordinates = new ArrayList<>();
+        for (int z = -2_048; z <= 2_048; z += 137) {
+            for (int x = -2_048; x <= 2_048; x += 193) {
+                coordinates.add(new int[] {x, z});
+            }
+        }
+        coordinates.add(new int[] {-1, -1});
+        coordinates.add(new int[] {0, 0});
+        coordinates.add(new int[] {15, 15});
+        coordinates.add(new int[] {16, 16});
+
+        Map<Long, HydrologyMath.Sample> baseline = new HashMap<>();
+        for (int[] coordinate : coordinates) {
+            baseline.put(
+                coordinateKey(coordinate[0], coordinate[1]),
+                HydrologyMath.sample(coordinate[0], coordinate[1], noise)
+            );
+        }
+        List<int[]> reversed = new ArrayList<>(coordinates);
+        Collections.reverse(reversed);
+        for (int[] coordinate : reversed) {
+            requireHydrologySampleEquals(
+                baseline.get(coordinateKey(coordinate[0], coordinate[1])),
+                HydrologyMath.sample(coordinate[0], coordinate[1], noise),
+                "reverse request order"
+            );
+        }
+
+        ExecutorService executor = Executors.newFixedThreadPool(4);
+        try {
+            List<Future<HydrologyMath.Sample>> futures = new ArrayList<>();
+            for (int[] coordinate : coordinates) {
+                futures.add(executor.submit(() ->
+                    HydrologyMath.sample(coordinate[0], coordinate[1], noise)
+                ));
+            }
+            for (int index = 0; index < coordinates.size(); index++) {
+                int[] coordinate = coordinates.get(index);
+                try {
+                    requireHydrologySampleEquals(
+                        baseline.get(coordinateKey(coordinate[0], coordinate[1])),
+                        futures.get(index).get(),
+                        "multi-thread request order"
+                    );
+                } catch (Exception exception) {
+                    throw new AssertionError("parallel hydrology sampling failed", exception);
+                }
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+        System.out.printf(
+            "hydrology request-order/thread samples=%d%n",
+            coordinates.size()
+        );
+    }
+
+    private static long coordinateKey(int x, int z) {
+        return ((long)x << 32) ^ (z & 0xFFFF_FFFFL);
+    }
+
+    private static void requireHydrologySampleEquals(
+        HydrologyMath.Sample expected,
+        HydrologyMath.Sample actual,
+        String description
+    ) {
+        requireClose(actual.mask(), expected.mask(), 0.0, description + " mask");
+        requireClose(
+            actual.signedDistance(),
+            expected.signedDistance(),
+            0.0,
+            description + " signed distance"
+        );
+        requireClose(actual.bedY(), expected.bedY(), 0.0, description + " bed");
+        requireClose(actual.waterY(), expected.waterY(), 0.0, description + " water");
+        require(actual.order() == expected.order(), description + " order");
     }
 
     private static double wave(int x, int z, double scale, double phase) {

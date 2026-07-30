@@ -7,6 +7,11 @@ import net.minecraft.world.level.biome.BiomeSource;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
+import dev.nexusmc.landscape.worldgen.v2.hydrology.RiverWaterPass;
+import net.minecraft.server.level.WorldGenRegion;
+import net.minecraft.world.level.StructureManager;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.levelgen.RandomState;
 
 /**
  * Stable V2 generator codec. Stage 4 deliberately delegates every generation
@@ -32,5 +37,16 @@ public final class NexusV2ChunkGenerator extends NoiseBasedChunkGenerator {
     @Override
     protected MapCodec<? extends ChunkGenerator> codec() {
         return CODEC;
+    }
+
+    @Override
+    public void buildSurface(
+        WorldGenRegion level,
+        StructureManager structureManager,
+        RandomState random,
+        ChunkAccess chunk
+    ) {
+        super.buildSurface(level, structureManager, random, chunk);
+        RiverWaterPass.apply(chunk, random);
     }
 }

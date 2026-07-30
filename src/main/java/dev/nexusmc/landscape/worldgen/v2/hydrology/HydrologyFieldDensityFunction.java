@@ -11,7 +11,8 @@ public record HydrologyFieldDensityFunction(
     Channel channel,
     DensityFunction.NoiseHolder layout,
     DensityFunction.NoiseHolder tributary,
-    DensityFunction.NoiseHolder elevation
+    DensityFunction.NoiseHolder elevation,
+    DensityFunction terrainSurface
 ) implements DensityFunction {
     private static final Codec<Channel> CHANNEL_CODEC = Codec.STRING.xmap(
         Channel::fromSerializedName,
@@ -25,7 +26,9 @@ public record HydrologyFieldDensityFunction(
             DensityFunction.NoiseHolder.CODEC.fieldOf("tributary")
                 .forGetter(HydrologyFieldDensityFunction::tributary),
             DensityFunction.NoiseHolder.CODEC.fieldOf("elevation")
-                .forGetter(HydrologyFieldDensityFunction::elevation)
+                .forGetter(HydrologyFieldDensityFunction::elevation),
+            DensityFunction.HOLDER_HELPER_CODEC.fieldOf("terrain_surface")
+                .forGetter(HydrologyFieldDensityFunction::terrainSurface)
         ).apply(instance, HydrologyFieldDensityFunction::new));
     private static final KeyDispatchDataCodec<HydrologyFieldDensityFunction> CODEC =
         KeyDispatchDataCodec.of(MAP_CODEC);
@@ -49,6 +52,15 @@ public record HydrologyFieldDensityFunction(
                 @Override
                 public double elevation(double x, double z) {
                     return HydrologyFieldDensityFunction.this.elevation.getValue(x, 0.0, z);
+                }
+
+                @Override
+                public double terrainY(double x, double z) {
+                    return terrainSurface.compute(new DensityFunction.SinglePointContext(
+                        (int)Math.round(x),
+                        64,
+                        (int)Math.round(z)
+                    ));
                 }
             }
         );
@@ -78,7 +90,8 @@ public record HydrologyFieldDensityFunction(
             channel,
             visitor.visitNoise(layout),
             visitor.visitNoise(tributary),
-            visitor.visitNoise(elevation)
+            visitor.visitNoise(elevation),
+            terrainSurface.mapAll(visitor)
         ));
     }
 
