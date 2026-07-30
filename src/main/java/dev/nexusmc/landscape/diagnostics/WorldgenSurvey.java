@@ -3,6 +3,8 @@ package dev.nexusmc.landscape.diagnostics;
 import com.mojang.logging.LogUtils;
 import dev.nexusmc.landscape.worldgen.v2.field.NexusV2FieldSampler;
 import dev.nexusmc.landscape.worldgen.v2.field.RegionalFieldMath;
+import dev.nexusmc.landscape.worldgen.v2.hydrology.HydrologyMath;
+import dev.nexusmc.landscape.worldgen.v2.hydrology.NexusV2HydrologySampler;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
@@ -93,6 +95,12 @@ public final class WorldgenSurvey {
             writeMap(atlas.rhythmColors(), output.resolve("rhythm-atlas.png"));
             writeMap(atlas.hierarchyColors(), output.resolve("hierarchy-atlas.png"));
             writeMap(atlas.upliftColors(), output.resolve("macro-uplift-atlas.png"));
+            writeMap(atlas.landformColors(), output.resolve("landform-atlas.png"));
+            writeMap(atlas.glacierColors(), output.resolve("glacier-atlas.png"));
+            writeMap(atlas.canyonColors(), output.resolve("canyon-atlas.png"));
+            writeMap(atlas.riverColors(), output.resolve("river-network-atlas.png"));
+            writeMap(atlas.riverOrderColors(), output.resolve("river-order-atlas.png"));
+            writeMap(atlas.waterLevelColors(), output.resolve("river-water-level-atlas.png"));
             Files.writeString(output.resolve("regional-atlas.txt"), atlas.report());
             if ("1".equals(System.getenv("NEXUS_LANDSCAPE_VERIFY_BIOMES"))) {
                 Files.writeString(
@@ -224,17 +232,26 @@ public final class WorldgenSurvey {
         int[][] rhythmColors = new int[REGIONAL_ATLAS_SIZE][REGIONAL_ATLAS_SIZE];
         int[][] hierarchyColors = new int[REGIONAL_ATLAS_SIZE][REGIONAL_ATLAS_SIZE];
         int[][] upliftColors = new int[REGIONAL_ATLAS_SIZE][REGIONAL_ATLAS_SIZE];
+        int[][] landformColors = new int[REGIONAL_ATLAS_SIZE][REGIONAL_ATLAS_SIZE];
+        int[][] glacierColors = new int[REGIONAL_ATLAS_SIZE][REGIONAL_ATLAS_SIZE];
+        int[][] canyonColors = new int[REGIONAL_ATLAS_SIZE][REGIONAL_ATLAS_SIZE];
+        int[][] riverColors = new int[REGIONAL_ATLAS_SIZE][REGIONAL_ATLAS_SIZE];
+        int[][] riverOrderColors = new int[REGIONAL_ATLAS_SIZE][REGIONAL_ATLAS_SIZE];
+        int[][] waterLevelColors = new int[REGIONAL_ATLAS_SIZE][REGIONAL_ATLAS_SIZE];
         Map<String, Integer> provinceCounts = new HashMap<>();
         Map<String, Integer> moodCounts = new HashMap<>();
         Map<String, Integer> rhythmCounts = new HashMap<>();
         NexusV2FieldSampler sampler =
             new NexusV2FieldSampler(level.getChunkSource().randomState());
+        NexusV2HydrologySampler hydrology =
+            new NexusV2HydrologySampler(level.getChunkSource().randomState());
         int centerX = surveyCenter("NEXUS_LANDSCAPE_SURVEY_CENTER_X");
         int centerZ = surveyCenter("NEXUS_LANDSCAPE_SURVEY_CENTER_Z");
         int halfSpan = REGIONAL_ATLAS_SIZE * REGIONAL_ATLAS_STEP / 2;
         double hierarchySum = 0.0;
         double upliftSum = 0.0;
         int dramatic = 0;
+        int riverSamples = 0;
 
         for (int imageZ = 0; imageZ < REGIONAL_ATLAS_SIZE; imageZ++) {
             int worldZ = centerZ - halfSpan + imageZ * REGIONAL_ATLAS_STEP;
@@ -257,6 +274,55 @@ public final class WorldgenSurvey {
                     new Color(20, 38, 48),
                     new Color(238, 238, 225)
                 );
+                double landform = sampler.channel(
+                    worldX,
+                    worldZ,
+                    RegionalFieldMath.Channel.LANDFORM_OFFSET
+                );
+                double glacier = sampler.channel(
+                    worldX,
+                    worldZ,
+                    RegionalFieldMath.Channel.GLACIER_MASS
+                );
+                double canyon = sampler.channel(
+                    worldX,
+                    worldZ,
+                    RegionalFieldMath.Channel.CANYON_INCISION
+                );
+                HydrologyMath.Sample river = hydrology.sample(worldX, worldZ);
+                landformColors[imageZ][imageX] = scalarColor(
+                    landform,
+                    new Color(25, 31, 34),
+                    new Color(239, 191, 93)
+                );
+                glacierColors[imageZ][imageX] = scalarColor(
+                    glacier,
+                    new Color(20, 29, 43),
+                    new Color(197, 238, 249)
+                );
+                canyonColors[imageZ][imageX] = scalarColor(
+                    canyon,
+                    new Color(31, 25, 24),
+                    new Color(207, 91, 46)
+                );
+                riverColors[imageZ][imageX] = scalarColor(
+                    river.mask(),
+                    new Color(238, 228, 198),
+                    new Color(24, 91, 177)
+                );
+                riverOrderColors[imageZ][imageX] = switch (river.order()) {
+                    case 3 -> new Color(25, 74, 154).getRGB();
+                    case 2 -> new Color(44, 125, 191).getRGB();
+                    default -> new Color(91, 171, 205).getRGB();
+                };
+                waterLevelColors[imageZ][imageX] = scalarColor(
+                    (river.waterLevel() - 48.0) / 48.0,
+                    new Color(43, 45, 114),
+                    new Color(104, 227, 205)
+                );
+                if (river.mask() > 0.5) {
+                    riverSamples++;
+                }
                 provinceCounts.merge(province.serializedName(), 1, Integer::sum);
                 moodCounts.merge(mood.serializedName(), 1, Integer::sum);
                 rhythmCounts.merge(rhythm.serializedName(), 1, Integer::sum);
@@ -275,12 +341,19 @@ public final class WorldgenSurvey {
             rhythmColors,
             hierarchyColors,
             upliftColors,
+            landformColors,
+            glacierColors,
+            canyonColors,
+            riverColors,
+            riverOrderColors,
+            waterLevelColors,
             provinceCounts,
             moodCounts,
             rhythmCounts,
             hierarchySum / sampleCount,
             upliftSum / sampleCount,
             dramatic * 100.0 / sampleCount,
+            riverSamples * 100.0 / sampleCount,
             centerX,
             centerZ,
             halfSpan
@@ -618,12 +691,19 @@ public final class WorldgenSurvey {
         int[][] rhythmColors,
         int[][] hierarchyColors,
         int[][] upliftColors,
+        int[][] landformColors,
+        int[][] glacierColors,
+        int[][] canyonColors,
+        int[][] riverColors,
+        int[][] riverOrderColors,
+        int[][] waterLevelColors,
         Map<String, Integer> provinceCounts,
         Map<String, Integer> moodCounts,
         Map<String, Integer> rhythmCounts,
         double meanHierarchyStrength,
         double meanMacroUplift,
         double dramaticPercent,
+        double riverPercent,
         int centerX,
         int centerZ,
         int halfSpan
@@ -636,7 +716,8 @@ public final class WorldgenSurvey {
                     + "span.min_z=%d%nspan.max_z=%d%nsample.step=%d%n"
                     + "sample.count=%d%nprovince.unique=%d%nmood.unique=%d%n"
                     + "rhythm.unique=%d%nhierarchy.mean=%.4f%n"
-                    + "macro_uplift.mean=%.4f%ndramatic.percent=%.2f%n",
+                    + "macro_uplift.mean=%.4f%ndramatic.percent=%.2f%n"
+                    + "river_mask.percent=%.2f%n",
                 centerX,
                 centerZ,
                 centerX - halfSpan,
@@ -650,7 +731,8 @@ public final class WorldgenSurvey {
                 rhythmCounts.size(),
                 meanHierarchyStrength,
                 meanMacroUplift,
-                dramaticPercent
+                dramaticPercent,
+                riverPercent
             ));
             appendCounts(report, "provinces", provinceCounts);
             appendCounts(report, "moods", moodCounts);

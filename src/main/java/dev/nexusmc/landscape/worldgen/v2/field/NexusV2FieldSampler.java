@@ -34,6 +34,39 @@ public final class NexusV2FieldSampler {
     }
 
     public RegionalFieldMath.Sample sample(int blockX, int blockZ) {
+        Inputs inputs = inputs(blockX, blockZ);
+        return RegionalFieldMath.sample(
+            inputs.continentalness,
+            inputs.temperature,
+            inputs.humidity,
+            inputs.macro,
+            inputs.detail,
+            inputs.ridge,
+            inputs.volcanic,
+            inputs.composition
+        );
+    }
+
+    public double channel(
+        int blockX,
+        int blockZ,
+        RegionalFieldMath.Channel channel
+    ) {
+        Inputs inputs = inputs(blockX, blockZ);
+        return RegionalFieldMath.compute(
+            channel,
+            inputs.continentalness,
+            inputs.temperature,
+            inputs.humidity,
+            inputs.macro,
+            inputs.detail,
+            inputs.ridge,
+            inputs.volcanic,
+            inputs.composition
+        );
+    }
+
+    private Inputs inputs(int blockX, int blockZ) {
         double warpSampleX = warpX.getValue(
             blockX * RegionalFieldMath.WARP_SCALE,
             0.0,
@@ -49,7 +82,7 @@ public final class NexusV2FieldSampler {
         DensityFunction.FunctionContext context =
             new DensityFunction.SinglePointContext(blockX, 64, blockZ);
 
-        return RegionalFieldMath.sample(
+        return new Inputs(
             randomState.router().continents().compute(context),
             temperature.getValue(
                 warpedX * RegionalFieldMath.CLIMATE_SCALE,
@@ -87,5 +120,17 @@ public final class NexusV2FieldSampler {
                 warpedZ * RegionalFieldMath.COMPOSITION_SCALE
             )
         );
+    }
+
+    private record Inputs(
+        double continentalness,
+        double temperature,
+        double humidity,
+        double macro,
+        double detail,
+        double ridge,
+        double volcanic,
+        double composition
+    ) {
     }
 }

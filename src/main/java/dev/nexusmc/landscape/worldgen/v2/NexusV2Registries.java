@@ -4,6 +4,7 @@ import com.mojang.serialization.MapCodec;
 import dev.nexusmc.landscape.NexusLandscape;
 import dev.nexusmc.landscape.worldgen.v2.chunk.NexusV2ChunkGenerator;
 import dev.nexusmc.landscape.worldgen.v2.field.RegionalFieldDensityFunction;
+import dev.nexusmc.landscape.worldgen.v2.hydrology.HydrologyFieldDensityFunction;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.levelgen.DensityFunction;
@@ -30,6 +31,10 @@ public final class NexusV2Registries {
         DENSITY_FUNCTION_TYPES.register(
             "regional_field",
             () -> RegionalFieldDensityFunction.MAP_CODEC
+        );
+        DENSITY_FUNCTION_TYPES.register(
+            "hydrology_field",
+            () -> HydrologyFieldDensityFunction.MAP_CODEC
         );
     }
 

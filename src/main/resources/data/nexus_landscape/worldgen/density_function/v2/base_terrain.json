@@ -2,16 +2,32 @@
   "type": "minecraft:add",
   "argument1": {
     "type": "minecraft:add",
-    "argument1": "nexus_landscape:tectonic/base_terrain",
+    "argument1": {
+      "type": "minecraft:add",
+      "argument1": "nexus_landscape:tectonic/base_terrain",
+      "argument2": {
+        "type": "minecraft:mul",
+        "argument1": 0.38,
+        "argument2": "nexus_landscape:v2/continent/delta_from_legacy"
+      }
+    },
     "argument2": {
       "type": "minecraft:mul",
-      "argument1": 0.38,
-      "argument2": "nexus_landscape:v2/continent/delta_from_legacy"
+      "argument1": 0.18,
+      "argument2": "nexus_landscape:v2/field/macro_uplift"
     }
   },
   "argument2": {
-    "type": "minecraft:mul",
-    "argument1": 0.18,
-    "argument2": "nexus_landscape:v2/field/macro_uplift"
+    "type": "minecraft:add",
+    "argument1": {
+      "type": "minecraft:mul",
+      "argument1": 0.1,
+      "argument2": "nexus_landscape:v2/field/landform_offset"
+    },
+    "argument2": {
+      "type": "minecraft:mul",
+      "argument1": -0.08,
+      "argument2": "nexus_landscape:v2/hydrology/carve"
+    }
   }
 }

@@ -25,6 +25,12 @@ public final class NexusV2Noises {
         key("v2/volcanic_arc");
     public static final ResourceKey<NormalNoise.NoiseParameters> COMPOSITION =
         key("v2/composition");
+    public static final ResourceKey<NormalNoise.NoiseParameters> HYDROLOGY_LAYOUT =
+        key("v2/hydrology_layout");
+    public static final ResourceKey<NormalNoise.NoiseParameters> HYDROLOGY_TRIBUTARY =
+        key("v2/hydrology_tributary");
+    public static final ResourceKey<NormalNoise.NoiseParameters> HYDROLOGY_ELEVATION =
+        key("v2/hydrology_elevation");
 
     private NexusV2Noises() {
     }

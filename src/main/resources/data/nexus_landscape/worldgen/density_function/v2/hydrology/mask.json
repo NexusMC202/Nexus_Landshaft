@@ -1,0 +1,10 @@
+{
+  "type": "minecraft:cache_2d",
+  "argument": {
+    "type": "nexus_landscape:hydrology_field",
+    "channel": "mask",
+    "layout": "nexus_landscape:v2/hydrology_layout",
+    "tributary": "nexus_landscape:v2/hydrology_tributary",
+    "elevation": "nexus_landscape:v2/hydrology_elevation"
+  }
+}

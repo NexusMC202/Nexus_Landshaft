@@ -80,6 +80,80 @@ public final class RegionalFieldMath {
                 volcanic,
                 composition
             );
+            case YOUNG_MOUNTAINS -> mountainFamily(
+                Province.YOUNG_FOLD_MOUNTAINS,
+                continentalness,
+                temperature,
+                humidity,
+                macro,
+                detail,
+                ridge,
+                volcanic,
+                composition
+            );
+            case OLD_MOUNTAINS -> mountainFamily(
+                Province.OLD_ERODED_HIGHLAND,
+                continentalness,
+                temperature,
+                humidity,
+                macro,
+                detail,
+                ridge,
+                volcanic,
+                composition
+            );
+            case PLATEAU -> mountainFamily(
+                Province.DRY_PLATEAU,
+                continentalness,
+                temperature,
+                humidity,
+                macro,
+                detail,
+                ridge,
+                volcanic,
+                composition
+            );
+            case VOLCANIC_MOUNTAINS -> mountainFamily(
+                Province.VOLCANIC_BELT,
+                continentalness,
+                temperature,
+                humidity,
+                macro,
+                detail,
+                ridge,
+                volcanic,
+                composition
+            );
+            case GLACIER -> glacierMass(
+                continentalness,
+                temperature,
+                humidity,
+                macro,
+                detail,
+                ridge,
+                volcanic
+            );
+            case CANYON -> canyonIncision(
+                continentalness,
+                temperature,
+                humidity,
+                macro,
+                detail,
+                ridge,
+                volcanic,
+                composition
+            );
+            case COAST -> coastWeight(continentalness);
+            case LANDFORM_OFFSET -> landformOffset(
+                continentalness,
+                temperature,
+                humidity,
+                macro,
+                detail,
+                ridge,
+                volcanic,
+                composition
+            );
             case DOMINANT_PROVINCE -> dominantProvince(
                 continentalness,
                 temperature,
@@ -363,6 +437,172 @@ public final class RegionalFieldMath {
         return clamp(relief * ridgeShape * rhythmMultiplier * asymmetricDetail, -0.12, 1.0);
     }
 
+    private static double mountainFamily(
+        Province province,
+        double continentalness,
+        double temperature,
+        double humidity,
+        double macro,
+        double detail,
+        double ridge,
+        double volcanic,
+        double composition
+    ) {
+        double provinceWeight = provinceWeight(
+            province.ordinal(),
+            continentalness,
+            temperature,
+            humidity,
+            macro,
+            detail,
+            ridge,
+            volcanic
+        );
+        double ridgeBand = Math.pow(clamp01(Math.abs(ridge) * 1.22), 1.18);
+        double phase = rhythm(composition, detail, continentalness).encodedValue();
+        double rhythmStrength = 0.28 + 0.72 * phase;
+        double familyShape = switch (province) {
+            case YOUNG_FOLD_MOUNTAINS ->
+                ridgeBand * (0.48 + 0.52 * smoothstep(-0.18, 0.78, macro));
+            case OLD_ERODED_HIGHLAND ->
+                Math.sqrt(ridgeBand) * (0.62 + 0.38 * (1.0 - Math.abs(detail)));
+            case DRY_PLATEAU ->
+                (0.54 + 0.46 * smoothstep(-0.48, 0.58, macro))
+                    * (0.72 + 0.28 * (1.0 - ridgeBand));
+            case VOLCANIC_BELT ->
+                smoothstep(0.32, 0.92, volcanic) * (0.46 + 0.54 * ridgeBand);
+            default -> 0.0;
+        };
+        return clamp01(provinceWeight * familyShape * rhythmStrength * 4.2);
+    }
+
+    private static double glacierMass(
+        double continentalness,
+        double temperature,
+        double humidity,
+        double macro,
+        double detail,
+        double ridge,
+        double volcanic
+    ) {
+        double glacial = provinceWeight(
+            Province.GLACIAL_MASSIF.ordinal(),
+            continentalness,
+            temperature,
+            humidity,
+            macro,
+            detail,
+            ridge,
+            volcanic
+        );
+        double cold = smoothstep(0.02, 0.74, -temperature);
+        double accumulation = smoothstep(-0.22, 0.72, macro)
+            * (0.42 + 0.58 * clamp01(Math.abs(ridge) * 1.18));
+        return clamp01(glacial * cold * accumulation * 5.0);
+    }
+
+    private static double canyonIncision(
+        double continentalness,
+        double temperature,
+        double humidity,
+        double macro,
+        double detail,
+        double ridge,
+        double volcanic,
+        double composition
+    ) {
+        double plateau = provinceWeight(
+            Province.DRY_PLATEAU.ordinal(),
+            continentalness,
+            temperature,
+            humidity,
+            macro,
+            detail,
+            ridge,
+            volcanic
+        );
+        double dry = smoothstep(-0.08, 0.70, -humidity);
+        double channel = 1.0 - smoothstep(0.05, 0.38, Math.abs(ridge));
+        double phase = rhythm(composition, detail, continentalness).encodedValue();
+        return clamp01(plateau * dry * channel * (0.52 + 0.48 * phase) * 6.0);
+    }
+
+    private static double coastWeight(double continentalness) {
+        return 1.0 - smoothstep(0.04, 0.24, Math.abs(continentalness));
+    }
+
+    private static double landformOffset(
+        double continentalness,
+        double temperature,
+        double humidity,
+        double macro,
+        double detail,
+        double ridge,
+        double volcanic,
+        double composition
+    ) {
+        double young = mountainFamily(
+            Province.YOUNG_FOLD_MOUNTAINS,
+            continentalness,
+            temperature,
+            humidity,
+            macro,
+            detail,
+            ridge,
+            volcanic,
+            composition
+        );
+        double old = mountainFamily(
+            Province.OLD_ERODED_HIGHLAND,
+            continentalness,
+            temperature,
+            humidity,
+            macro,
+            detail,
+            ridge,
+            volcanic,
+            composition
+        );
+        double plateau = mountainFamily(
+            Province.DRY_PLATEAU,
+            continentalness,
+            temperature,
+            humidity,
+            macro,
+            detail,
+            ridge,
+            volcanic,
+            composition
+        );
+        double volcano = mountainFamily(
+            Province.VOLCANIC_BELT,
+            continentalness,
+            temperature,
+            humidity,
+            macro,
+            detail,
+            ridge,
+            volcanic,
+            composition
+        );
+        double glacier = glacierMass(
+            continentalness,
+            temperature,
+            humidity,
+            macro,
+            detail,
+            ridge,
+            volcanic
+        );
+        return clamp01(
+            0.80 * young
+                + 0.34 * old
+                + 0.42 * plateau
+                + 0.76 * volcano
+                + 0.16 * glacier
+        );
+    }
+
     private static double hierarchyStrength(
         double continentalness,
         double macro,
@@ -558,6 +798,14 @@ public final class RegionalFieldMath {
         RHYTHM(Kind.RHYTHM, -1),
         HIERARCHY(Kind.HIERARCHY, -1),
         MACRO_UPLIFT(Kind.UPLIFT, -1),
+        YOUNG_MOUNTAINS(Kind.YOUNG_MOUNTAINS, -1),
+        OLD_MOUNTAINS(Kind.OLD_MOUNTAINS, -1),
+        PLATEAU(Kind.PLATEAU, -1),
+        VOLCANIC_MOUNTAINS(Kind.VOLCANIC_MOUNTAINS, -1),
+        GLACIER_MASS(Kind.GLACIER, -1),
+        CANYON_INCISION(Kind.CANYON, -1),
+        COAST_WEIGHT(Kind.COAST, -1),
+        LANDFORM_OFFSET(Kind.LANDFORM_OFFSET, -1),
         DOMINANT_PROVINCE(Kind.DOMINANT_PROVINCE, -1),
         DOMINANT_MOOD(Kind.DOMINANT_MOOD, -1);
 
@@ -589,6 +837,14 @@ public final class RegionalFieldMath {
         RHYTHM,
         HIERARCHY,
         UPLIFT,
+        YOUNG_MOUNTAINS,
+        OLD_MOUNTAINS,
+        PLATEAU,
+        VOLCANIC_MOUNTAINS,
+        GLACIER,
+        CANYON,
+        COAST,
+        LANDFORM_OFFSET,
         DOMINANT_PROVINCE,
         DOMINANT_MOOD
     }
