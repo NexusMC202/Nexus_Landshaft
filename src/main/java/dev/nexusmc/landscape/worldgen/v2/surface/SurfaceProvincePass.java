@@ -11,6 +11,9 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Collections;
+import java.util.WeakHashMap;
+import java.util.concurrent.atomic.LongAdder;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -34,6 +37,8 @@ public final class SurfaceProvincePass {
     private static final int UNKNOWN_LOG_LIMIT = 256;
     private static final Set<String> LOGGED_UNKNOWN = new LinkedHashSet<>();
     private static final Map<String, BlockState> MATERIALS = materials();
+    private static final Map<RandomState, Telemetry> TELEMETRY =
+        Collections.synchronizedMap(new WeakHashMap<>());
 
     private SurfaceProvincePass() {
     }
@@ -49,6 +54,7 @@ public final class SurfaceProvincePass {
         NexusV2FieldSampler fields = new NexusV2FieldSampler(randomState);
         NexusV2HydrologySampler hydrology =
             new NexusV2HydrologySampler(randomState);
+        Telemetry telemetry = telemetry(randomState);
         NexusV2FieldSampler.SurfaceInputs[][] inputs =
             new NexusV2FieldSampler.SurfaceInputs[18][18];
         double[][] analyticalY = new double[18][18];
@@ -105,30 +111,55 @@ public final class SurfaceProvincePass {
                     slope
                 );
                 SurfaceProfile profile = SurfaceProfileCatalog.find(biomeKey)
+                    .filter(candidate -> candidate.elevation()
+                        != SurfaceProfile.ElevationBand.SUBTERRANEAN)
                     .orElseGet(() -> fallback(
                         biomeKey,
                         input.temperature(),
                         input.humidity(),
                         surfaceY < 40
                     ));
-                applyColumn(
+                SurfaceSelection selection =
+                    SurfaceProfileResolver.resolve(profile, context);
+                int changed = applyColumn(
                     chunk,
                     cursor,
                     profile,
-                    SurfaceProfileResolver.resolve(profile, context),
+                    selection,
                     context
                 );
+                telemetry.columns.increment();
+                telemetry.blocks.add(changed);
+                telemetry.zones[selection.zone().ordinal()].increment();
             }
         }
     }
 
-    private static void applyColumn(
+    public static String snapshotAndReset(RandomState randomState) {
+        Telemetry telemetry = telemetry(randomState);
+        StringBuilder result = new StringBuilder();
+        result.append("surface.columns=").append(telemetry.columns.sumThenReset())
+            .append('\n');
+        result.append("surface.blocks_changed=")
+            .append(telemetry.blocks.sumThenReset()).append('\n');
+        for (SurfaceSelection.Zone zone : SurfaceSelection.Zone.values()) {
+            result.append("surface.zone.")
+                .append(zone.name().toLowerCase(java.util.Locale.ROOT))
+                .append('=')
+                .append(telemetry.zones[zone.ordinal()].sumThenReset())
+                .append('\n');
+        }
+        return result.toString();
+    }
+
+    private static int applyColumn(
         ChunkAccess chunk,
         BlockPos.MutableBlockPos cursor,
         SurfaceProfile profile,
         SurfaceSelection selection,
         SurfaceContext context
     ) {
+        int changed = 0;
         BlockState top = material(
             selection.topPalette(),
             context,
@@ -145,7 +176,7 @@ public final class SurfaceProvincePass {
             BlockState existing = chunk.getBlockState(cursor);
             if (!replaceable(existing)) {
                 if (layer == 0) {
-                    return;
+                    return 0;
                 }
                 break;
             }
@@ -154,7 +185,9 @@ public final class SurfaceProvincePass {
                 layer == 0 ? top : substrate,
                 false
             );
+            changed++;
         }
+        return changed;
     }
 
     private static int materialSurfaceY(
@@ -302,6 +335,28 @@ public final class SurfaceProvincePass {
         for (String id : ids) {
             BuiltInRegistries.BLOCK.getOptional(ResourceLocation.parse(id))
                 .ifPresent(block -> result.put(id, block.defaultBlockState()));
+        }
+    }
+
+    private static Telemetry telemetry(RandomState randomState) {
+        synchronized (TELEMETRY) {
+            return TELEMETRY.computeIfAbsent(
+                randomState,
+                ignored -> new Telemetry()
+            );
+        }
+    }
+
+    private static final class Telemetry {
+        private final LongAdder columns = new LongAdder();
+        private final LongAdder blocks = new LongAdder();
+        private final LongAdder[] zones =
+            new LongAdder[SurfaceSelection.Zone.values().length];
+
+        private Telemetry() {
+            for (int index = 0; index < zones.length; index++) {
+                zones[index] = new LongAdder();
+            }
         }
     }
 }

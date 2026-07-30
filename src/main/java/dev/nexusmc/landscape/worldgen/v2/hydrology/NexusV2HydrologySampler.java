@@ -1,10 +1,9 @@
 package dev.nexusmc.landscape.worldgen.v2.hydrology;
 
 import dev.nexusmc.landscape.worldgen.v2.field.NexusV2Noises;
+import dev.nexusmc.landscape.worldgen.v2.util.BoundedConcurrentCache;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.synth.NormalNoise;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Runtime diagnostic/placement view of the exact noises used by the
@@ -15,9 +14,12 @@ public final class NexusV2HydrologySampler {
     private final NormalNoise layout;
     private final NormalNoise tributary;
     private final NormalNoise elevation;
-    private final Map<Long, Double> terrainYCache = new ConcurrentHashMap<>();
-    private final Map<Long, Boolean> channelSegmentCache =
-        new ConcurrentHashMap<>();
+    private static final int TERRAIN_CACHE_LIMIT = 8_192;
+    private static final int SEGMENT_CACHE_LIMIT = 4_096;
+    private final BoundedConcurrentCache<Long, Double> terrainYCache =
+        new BoundedConcurrentCache<>(TERRAIN_CACHE_LIMIT);
+    private final BoundedConcurrentCache<Long, Boolean> channelSegmentCache =
+        new BoundedConcurrentCache<>(SEGMENT_CACHE_LIMIT);
     private final HydrologyMath.NoiseSource source;
 
     public NexusV2HydrologySampler(RandomState randomState) {

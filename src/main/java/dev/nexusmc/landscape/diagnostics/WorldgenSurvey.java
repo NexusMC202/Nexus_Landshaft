@@ -6,6 +6,8 @@ import dev.nexusmc.landscape.worldgen.v2.field.RegionalFieldMath;
 import dev.nexusmc.landscape.worldgen.v2.hydrology.HydrologyMath;
 import dev.nexusmc.landscape.worldgen.v2.hydrology.NexusV2HydrologySampler;
 import dev.nexusmc.landscape.worldgen.v2.hydrology.RiverWaterPass;
+import dev.nexusmc.landscape.worldgen.v2.surface.SurfaceProvincePass;
+import dev.nexusmc.landscape.worldgen.v2.vegetation.VegetationProvincePass;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
@@ -99,6 +101,12 @@ public final class WorldgenSurvey {
             RiverWaterPass.snapshotAndReset(
                 server.overworld().getChunkSource().randomState()
             );
+            SurfaceProvincePass.snapshotAndReset(
+                server.overworld().getChunkSource().randomState()
+            );
+            VegetationProvincePass.snapshotAndReset(
+                server.overworld().getChunkSource().randomState()
+            );
             SurveyResult result = survey(server.overworld());
             writeMap(result.colors(), output.resolve("survey.png"));
             writeMap(result.provinceColors(), output.resolve("province.png"));
@@ -119,6 +127,14 @@ public final class WorldgenSurvey {
                 output.resolve("analytical-terrain-error-classes.png")
             );
             Files.writeString(output.resolve("survey.txt"), result.report());
+            Files.writeString(
+                output.resolve("stage6-runtime.txt"),
+                SurfaceProvincePass.snapshotAndReset(
+                    server.overworld().getChunkSource().randomState()
+                ) + VegetationProvincePass.snapshotAndReset(
+                    server.overworld().getChunkSource().randomState()
+                )
+            );
             if ("1".equals(System.getenv("NEXUS_LANDSCAPE_TARGETED_ONLY"))) {
                 LOGGER.info(
                     "Nexus targeted worldgen survey complete: {}",

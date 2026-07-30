@@ -1,6 +1,7 @@
 package dev.nexusmc.landscape.worldgen.v2.field;
 
 import dev.nexusmc.landscape.worldgen.v2.hydrology.HydrologyMath;
+import dev.nexusmc.landscape.worldgen.v2.util.BoundedConcurrentCache;
 import java.util.EnumSet;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -30,7 +31,37 @@ public final class RegionalFieldMathSelfTest {
         verifyActiveRiverNetworkQuality();
         verifyHydrologyRequestOrderAndThreads();
         verifyBasinSeamsAndConcurrency();
+        verifyBoundedConcurrentCache();
         System.out.println("RegionalFieldMathSelfTest: PASS");
+    }
+
+    private static void verifyBoundedConcurrentCache() {
+        BoundedConcurrentCache<Integer, Integer> cache =
+            new BoundedConcurrentCache<>(64);
+        ExecutorService executor = Executors.newFixedThreadPool(4);
+        try {
+            List<Future<?>> futures = new ArrayList<>();
+            for (int worker = 0; worker < 4; worker++) {
+                int offset = worker * 1_000;
+                futures.add(executor.submit(() -> {
+                    for (int index = 0; index < 1_000; index++) {
+                        cache.put(offset + index, index);
+                    }
+                }));
+            }
+            for (Future<?> future : futures) {
+                try {
+                    future.get();
+                } catch (Exception exception) {
+                    throw new AssertionError("bounded cache worker failed", exception);
+                }
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+        require(cache.size() <= 64, "bounded cache exceeded capacity");
+        cache.clear();
+        require(cache.size() == 0, "bounded cache clear failed");
     }
 
     private static void verifyNormalizationAndRanges() {

@@ -9,6 +9,9 @@ import dev.nexusmc.landscape.worldgen.v2.surface.SurfaceContextFactory;
 import dev.nexusmc.landscape.worldgen.v2.surface.SurfaceNoise;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Collections;
+import java.util.WeakHashMap;
+import java.util.concurrent.atomic.LongAdder;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -31,6 +34,8 @@ import net.minecraft.world.level.levelgen.RandomState;
  */
 public final class VegetationProvincePass {
     private static final Map<String, BlockState> GROUND = groundStates();
+    private static final Map<RandomState, Telemetry> TELEMETRY =
+        Collections.synchronizedMap(new WeakHashMap<>());
 
     private VegetationProvincePass() {
     }
@@ -46,6 +51,8 @@ public final class VegetationProvincePass {
         NexusV2FieldSampler fields = new NexusV2FieldSampler(randomState);
         NexusV2HydrologySampler hydrology =
             new NexusV2HydrologySampler(randomState);
+        Telemetry telemetry = telemetry(randomState);
+        telemetry.chunks.increment();
 
         for (int localZ = 1; localZ < 16; localZ += 4) {
             for (int localX = 1; localX < 16; localX += 4) {
@@ -57,12 +64,22 @@ public final class VegetationProvincePass {
                     hydrology,
                     seed,
                     worldX,
-                    worldZ
+                    worldZ,
+                    telemetry
                 );
             }
         }
-        placeOwnedTrees(level, chunk, fields, hydrology, seed);
-        decorateCaves(level, chunk, seed);
+        placeOwnedTrees(level, chunk, fields, hydrology, seed, telemetry);
+        decorateCaves(level, chunk, seed, telemetry);
+    }
+
+    public static String snapshotAndReset(RandomState randomState) {
+        Telemetry telemetry = telemetry(randomState);
+        return "vegetation.chunks=" + telemetry.chunks.sumThenReset() + '\n'
+            + "vegetation.ground_blocks=" + telemetry.ground.sumThenReset() + '\n'
+            + "vegetation.rock_blocks=" + telemetry.rocks.sumThenReset() + '\n'
+            + "vegetation.tree_attempts=" + telemetry.trees.sumThenReset() + '\n'
+            + "vegetation.cave_accents=" + telemetry.caves.sumThenReset() + '\n';
     }
 
     private static void decorateGround(
@@ -71,7 +88,8 @@ public final class VegetationProvincePass {
         NexusV2HydrologySampler hydrology,
         long seed,
         int x,
-        int z
+        int z,
+        Telemetry telemetry
     ) {
         Sample sample = sample(level, fields, hydrology, seed, x, z);
         if (sample == null || !sample.selection().terrestrialAllowed()) {
@@ -91,6 +109,7 @@ public final class VegetationProvincePass {
                     : Blocks.MOSSY_COBBLESTONE.defaultBlockState(),
                 2
             );
+            telemetry.rocks.increment();
             return;
         }
         if (roll > selection.groundDensity()) {
@@ -105,6 +124,7 @@ public final class VegetationProvincePass {
         );
         if (state.canSurvive(level, position)) {
             level.setBlock(position, state, 2);
+            telemetry.ground.increment();
         }
     }
 
@@ -113,7 +133,8 @@ public final class VegetationProvincePass {
         ChunkAccess chunk,
         NexusV2FieldSampler fields,
         NexusV2HydrologySampler hydrology,
-        long seed
+        long seed,
+        Telemetry telemetry
     ) {
         int minX = chunk.getPos().getMinBlockX();
         int minZ = chunk.getPos().getMinBlockZ();
@@ -149,6 +170,7 @@ public final class VegetationProvincePass {
                     unit(seed, x, z, 0x01D6L)
                         < sample.selection().oldGrowthDensity()
                 );
+                telemetry.trees.increment();
             }
         }
     }
@@ -192,6 +214,7 @@ public final class VegetationProvincePass {
             slope
         );
         VegetationProfile profile = VegetationProfileCatalog.find(biomeId)
+            .filter(candidate -> candidate.terrestrial())
             .orElseGet(() -> VegetationProfileCatalog.fallback(
                 input.temperature(),
                 input.humidity(),
@@ -217,7 +240,8 @@ public final class VegetationProvincePass {
     private static void decorateCaves(
         WorldGenLevel level,
         ChunkAccess chunk,
-        long seed
+        long seed,
+        Telemetry telemetry
     ) {
         int minX = chunk.getPos().getMinBlockX();
         int minZ = chunk.getPos().getMinBlockZ();
@@ -250,6 +274,7 @@ public final class VegetationProvincePass {
                         && unit(seed, x, z, y * 31L) < 0.42
                         && accent.canSurvive(level, cursor)) {
                         level.setBlock(cursor, accent, 2);
+                        telemetry.caves.increment();
                     }
                 }
             }
@@ -374,6 +399,23 @@ public final class VegetationProvincePass {
             }
         }
         return Map.copyOf(result);
+    }
+
+    private static Telemetry telemetry(RandomState randomState) {
+        synchronized (TELEMETRY) {
+            return TELEMETRY.computeIfAbsent(
+                randomState,
+                ignored -> new Telemetry()
+            );
+        }
+    }
+
+    private static final class Telemetry {
+        private final LongAdder chunks = new LongAdder();
+        private final LongAdder ground = new LongAdder();
+        private final LongAdder rocks = new LongAdder();
+        private final LongAdder trees = new LongAdder();
+        private final LongAdder caves = new LongAdder();
     }
 
     private record Sample(
