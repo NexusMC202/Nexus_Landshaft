@@ -67,6 +67,13 @@ sample = f(worldSeed, dimensionId, blockX, blockY, blockZ, configVersion)
 | glacier mass | glacial graph | terrain, ice, caves, vegetation |
 | cave family weights | cave graph | final density, cave surfaces, landmarks |
 | ecotone weight | biome transition sampler | surfaces, vegetation |
+| mood weights | composition intent atlas | landforms, vegetation, clutter, fog eligibility |
+| rhythm phase | composition intent atlas | relief, negative space, landmark eligibility |
+| hierarchy anchor/level | composition intent atlas | silhouettes, vistas, landmarks |
+| openness/vista direction | composition sampler | vegetation, framing, routes, diagnostics |
+| negative-space protection | composition sampler | terrain detail, vegetation, landmarks |
+| wonder budget | composition budget atlas | landmark reservation and diagnostics |
+| scenic-site score | composition sampler | human-scale places, routes, diagnostics |
 
 Нельзя создавать параллельные «похожие» noise-поля для разных подсистем.
 Например, влажность речного коридора обязана читать `river_distance`, а не
@@ -93,16 +100,17 @@ density graph либо regional atlas. Feature может добавлять т�
 ```text
 L0 seed and version
   -> L1 continent/ocean skeleton
-  -> L2 geological province atlas
+  -> L2 geological province + composition intent atlases
   -> L3 regional landform fields
   -> L4 climate and base elevation
   -> L5 hydrology/glacial derived fields
-  -> L6 biome climate selection
-  -> L7 surface and cave density
-  -> L8 chunk-local water/surface completion
-  -> L9 vegetation communities and ecotones
-  -> L10 rare landmarks
-  -> L11 diagnostics
+  -> L6 derived composition/vista fields
+  -> L7 biome climate selection
+  -> L8 surface and cave density
+  -> L9 chunk-local water/surface completion
+  -> L10 vegetation communities, ecotones and framing
+  -> L11 budgeted landmarks
+  -> L12 diagnostics
 ```
 
 ### 3.1 L0 — seed and config version
@@ -113,6 +121,7 @@ L0 seed and version
 ```text
 nexus_landscape:v2/continent
 nexus_landscape:v2/province
+nexus_landscape:v2/composition
 nexus_landscape:v2/hydrology
 nexus_landscape:v2/caves
 nexus_landscape:v2/vegetation
@@ -146,10 +155,16 @@ nexus_landscape:v2/landmarks
 | archipelago belt | 1 500–8 000 |
 | continental shelf | 192–1 024 шириной |
 
-### 3.3 L2 — geological province atlas
+### 3.3 L2 — geological province and composition intent atlases
 
 Province atlas выбирается до biome и не читает блоки мира. Он хранит
 непрерывные веса и dominant province.
+
+Composition intent atlas на том же региональном уровне выбирает непрерывные
+`mood_weights`, `rhythm_phase`, hierarchy anchors и исходный wonder budget.
+Он независим от biome ID. Эти intent-сигналы доступны L3, поэтому настроение
+и ритм могут ограничить relief до создания final terrain, не образуя обратной
+зависимости от готового вида.
 
 Обязательные провинции:
 
@@ -182,6 +197,10 @@ Province placement ограничивается контекстом:
 ### 3.4 L3 — regional landforms
 
 Landform graph получает province weights, но не biome ID.
+Он также получает composition intent: dramatic weight усиливает только
+разрешённые dominant forms, quiet/recovery weight расширяет долины и
+buildable terraces, а hierarchy anchor задаёт приоритет силуэта. Mood не
+может отменить геологические ограничения провинции.
 
 Обязательные выходы:
 
@@ -253,7 +272,24 @@ Hydrology читает только L1–L4. Она не читает final terr
 После L5 запрещено менять base elevation способом, который нарушает
 направление стока. Разрешены bounded detail и surface material.
 
-### 3.7 L6 — biome climate selection
+### 3.7 L6 — derived composition and vista fields
+
+После появления analytical base elevation, hydrology и glacier fields
+composition sampler выводит:
+
+- `openness`;
+- `probable_view_direction`;
+- `focal_distance_range`;
+- `silhouette_strength`;
+- `foreground_framing_score`;
+- `reveal_eligibility`;
+- `negative_space_protection`;
+- `scenic_site_score`.
+
+Sampler использует только аналитические поля L1–L5. Он не выполняет ray
+tracing по блокам и не загружает соседние чанки.
+
+### 3.8 L7 — biome climate selection
 
 На первом V2-релизе сохраняется ванильный
 `minecraft:multi_noise/minecraft:overworld`, чтобы не терять совместимость
@@ -268,12 +304,12 @@ Province не заменяет biome. Она определяет геологи
 speck criteria, допускается custom biome source только отдельной версией
 settings после сравнительного 20-seed отчёта.
 
-### 3.8 L7–L10 — density, completion and decoration
+### 3.9 L8–L11 — density, completion and decoration
 
 Surface terrain и cave carve объединяются в `final_density`. Затем
 chunk-local pass завершает речную воду и материалы, surface rules выбирают
-верхние слои, community placement создаёт растительность, а landmarks
-добавляются последними.
+верхние слои, community placement создаёт растительность и framing, а
+landmarks добавляются последними в пределах wonder budget.
 
 Landmark не имеет права менять водораздел, перекрывать основной речной канал
 или создавать новую гору.
@@ -290,6 +326,11 @@ seed
 │  └─ province_weights
 │     ├─ ridge/plateau/volcanic/karst fields
 │     └─ stone profile
+├─ composition intent noises
+│  ├─ mood_weights
+│  ├─ rhythm_phase
+│  ├─ hierarchy_anchor/level
+│  └─ wonder_budget
 ├─ climate base noises
 │  ├─ temperature_base
 │  ├─ humidity_base
@@ -310,14 +351,24 @@ continent + province + landform + climate
 ├─ cave_family_weights
 └─ biome climate parameters
 
+base_elevation + hydrology + glacier + composition_intent
+└─ composition_fields
+   ├─ openness
+   ├─ probable_view_direction/focal_range
+   ├─ silhouette_strength
+   ├─ foreground_framing/reveal
+   ├─ negative_space_protection
+   └─ scenic_site_score
+
 base_elevation + hydrology + glacier + caves
 └─ final_density
 
-biome + province + slope + height + water distance
+biome + province + slope + height + water distance + composition_fields
 ├─ surface profile
 ├─ vegetation community
 ├─ ecotone
-└─ landmark eligibility
+├─ framing and route eligibility
+└─ budgeted landmark eligibility
 ```
 
 Запрещённые обратные зависимости:
@@ -327,6 +378,9 @@ biome + province + slope + height + water distance
 - density <- placed feature;
 - cave family <- cave landmark;
 - vegetation <- клиентская погода или shader state.
+- composition intent <- готовые блоки, screenshot или выбранная игроком
+  camera position;
+- wonder budget <- результат случайных попыток feature placement.
 
 ## 5. Density graph V2
 
@@ -762,6 +816,419 @@ glacier/moraine допускается `64–320`.
 Ecotone управляет одновременно top material, кустами, canopy density,
 deadwood и debris. Изменение только цвета травы не считается реализацией.
 
+## Landscape Art Direction and Composition System
+
+Техническая правдоподобность является основанием, но не доказательством
+выразительного мира. Composition system управляет тем, как формы читаются в
+движении: где возникает доминанта, откуда она раскрывается, что её
+поддерживает и где мир оставляет спокойное пространство.
+
+Composition не строит декорацию поверх готового мира. Её intent-сигналы
+выбираются на L2 и участвуют в L3 landform graph. Derived-сигналы вычисляются
+на L6 из аналитического terrain. Система не использует screenshots, camera
+position игрока, client shader state или ray tracing по соседним чанкам.
+
+### 1. Regional mood profiles
+
+Mood представлен десятью непрерывными весами `0..1`:
+
+- `tranquil`;
+- `pastoral`;
+- `mysterious`;
+- `ancient`;
+- `monumental`;
+- `desolate`;
+- `enchanted`;
+- `dangerous`;
+- `sacred`;
+- `melancholic`.
+
+В каждой точке веса нормализуются. Для dominant mood reporting используется
+максимум, но generation consumers смешивают до трёх старших весов. Типичный
+размер mood region — `2 048–8 192` блоков, ширина перехода — не менее `256`
+блоков. Mood не зависит от biome ID: одинаковый forest biome может выражать
+tranquil, ancient или mysterious region.
+
+Mood является модификатором допустимых геологических форм, а не их заменой.
+Например, `monumental` усиливает hierarchy и высотный контраст существующей
+горной провинции, но не создаёт альпийский пик в wetland basin.
+
+`MoodInfluence` выдаёт ограниченные коэффициенты:
+
+| Канал | Допустимое воздействие |
+|---|---|
+| openness | ширина полян, долин, берегов и canopy gaps |
+| relief intensity | множитель regional relief в пределах province envelope |
+| forest density | cluster coverage, а не равномерное число деревьев |
+| canopy height | выбор morphology/age pool |
+| fog eligibility | вероятность сервер-независимого atmosphere profile |
+| water frequency | eligibility малых озёр/wet pockets, не направление рек |
+| landmark rarity | стоимость и разрешённый hierarchy level |
+| deadwood | fallen logs, snags и debris rate |
+| colour-compatible palette | пересечение biome и province block palettes |
+| visual clutter | ground cover/debris/detail density |
+| enclosed/open ratio | доля corridor, clearing и negative space |
+
+Все коэффициенты имеют config bounds. Ни один mood не может:
+
+- изменить flow direction;
+- превысить province height envelope;
+- отменить protected negative space;
+- гарантировать landmark;
+- требовать клиентский мод.
+
+Fog eligibility — только сигнал возможности атмосферы. Серверный terrain,
+surface и vegetation не зависят от того, отображает ли клиент fog. Sodium и
+shaders не участвуют в выборе mood.
+
+Начальные художественные тенденции:
+
+| Mood | Пространственная тенденция |
+|---|---|
+| tranquil | низкий clutter, спокойная вода, широкое negative space |
+| pastoral | пологие террасы, поляны, water access, human-scale sites |
+| mysterious | enclosed corridors, высокий framing, редкие раскрытия |
+| ancient | старые silhouettes, deadwood, weathered stone, низкая симметрия |
+| monumental | сильная доминанта, длинная focal distance, мало конкурентов |
+| desolate | открытость, exposed substrate, редкая растительность |
+| enchanted | редкие необычные palette accents и minor wonder eligibility |
+| dangerous | высокий локальный contrast, enclosed spaces, cave exposure |
+| sacred | один защищённый focal site, низкий clutter вокруг него |
+| melancholic | широкие тихие пространства, water/shore emphasis, deadwood |
+
+Эти тенденции не являются фиксированными биомными пресетами. Итог всегда
+ограничен geology, climate, hydrology и `BIOME_MATRIX.md`.
+
+### 2. Visual hierarchy
+
+Каждый composition region содержит четыре уровня чтения:
+
+1. primary landmark либо dominant natural silhouette;
+2. secondary supporting forms;
+3. foreground detail and framing;
+4. quiet negative space.
+
+Primary необязательно является placed feature. Им может быть mountain crest,
+lake basin, fjord wall, volcano, canyon opening, island massif или изгиб
+берега. `hierarchy_anchor` задаёт expected center/direction, а
+`hierarchy_level` — local, minor, regional либо world.
+
+Landform graph распределяет высотный и detail contrast:
+
+- primary получает самый читаемый silhouette strength;
+- secondary forms имеют `35–70%` primary contrast и направляют взгляд;
+- foreground detail использует малый spatial scale и не закрывает focal arc;
+- negative space получает detail suppression, но сохраняет surface texture.
+
+Горная система выделяет один dominant crest segment на composition cell либо
+небольшую согласованную группу в clustered profile. Остальные пики снижаются
+по hierarchy envelope и поддерживают главную ось.
+
+Два regional/world anchors не могут иметь перекрывающиеся influence zones,
+кроме явно выбранного `clustered_region_profile`. Такой профиль обязан иметь
+одну общую композиционную ось; он не разрешает случайную россыпь равнозначных
+объектов.
+
+### 3. Vista and reveal system
+
+Vista system повышает вероятность выразительного раскрытия, не обещая
+идеальный кадр из каждой координаты.
+
+Поддерживаемые archetypes:
+
+- enclosed forest corridor;
+- gradual opening;
+- distant focal landmark;
+- river-directed vista;
+- ridge saddle viewpoint;
+- lake basin reveal;
+- canyon entrance;
+- coast overlook.
+
+`VistaSample` содержит:
+
+```text
+openness
+probableViewDirection
+focalDistanceMin
+focalDistanceMax
+silhouetteStrength
+foregroundFramingScore
+revealEligibility
+vistaArchetype
+```
+
+Алгоритм использует analytical base elevation, broad slope, hydrology,
+canopy-density potential и hierarchy anchors:
+
+1. выбирает route/view candidate на valley floor, river corridor, saddle,
+   forest edge, basin rim или coast overlook;
+2. оценивает высотные профили по ограниченному набору направлений и дистанций
+   `128, 256, 512, 1 024, 2 048` блоков;
+3. вычисляет долю незакрытого углового сектора без block ray tracing;
+4. ищет direction с focal silhouette и поддерживающими боковыми формами;
+5. проверяет последовательность enclosed -> transitional -> open;
+6. выводит framing и reveal scores.
+
+Это bounded sampling чистых координатных полей. Оно не вызывает
+`Level#getChunk`, не читает готовые деревья и не зависит от render distance.
+
+Consumers:
+
+| Сигнал | Потребители |
+|---|---|
+| openness | canopy density, clearing size, clutter, diagnostics |
+| view direction | asymmetric framing, route preference, landmark orientation |
+| focal range | hierarchy spacing и silhouette scale |
+| silhouette strength | landform contrast и landmark eligibility |
+| framing score | vegetation gaps, cliff/island secondary forms |
+| reveal eligibility | clearing edge, saddle, canyon/coast transition |
+
+### 4. Landscape rhythm
+
+`rhythm_phase` имеет четыре смешиваемых состояния:
+
+- `quiet`;
+- `transitional`;
+- `dramatic`;
+- `recovery`.
+
+Они образуют региональную последовательность, а не независимый white noise.
+Composition intent atlas использует низкочастотное phase field и adjacency
+penalty. После dramatic core вероятность recovery повышается в направлении
+естественного выхода: downstream valley, mountain foreland, basin, shelf или
+coast.
+
+Ограничения для canonical composition supercell `8 192 × 8 192`:
+
+- dramatic terrain занимает не более `35%` площади суши;
+- protected quiet/recovery занимает не менее `25%` площади суши;
+- непрерывный dramatic corridor не длиннее `4 096` блоков без recovery
+  interval шириной минимум `512` блоков;
+- regional/world landmark influence занимает не более `20%` площади;
+- clustered dramatic profile может превысить локальный лимит, но не лимит
+  всего supercell.
+
+Water basin или крупный океанский участок может выполнять роль recovery.
+Ритм ограничивает relief intensity, clutter и landmark eligibility
+одновременно. Снижение только высоты без снижения визуального шума не
+считается recovery.
+
+### 5. Negative space
+
+`negative_space_protection` сохраняет:
+
+- луга;
+- широкие берега;
+- спокойные речные долины;
+- естественные поляны;
+- открытые снежные поля;
+- водную гладь;
+- строительные площадки;
+- участки с низкой плотностью декораций.
+
+Целевое покрытие protected negative space — `25–45%` доступной поверхности
+composition supercell и не менее `15%` даже внутри dramatic province.
+Конкретная доля зависит от mood, geology и water.
+
+Protection уменьшает:
+
+- high-frequency height detail;
+- canopy closure;
+- boulder/deadwood density;
+- minor landmark attempts;
+- насыщенность competing palette patches.
+
+Она не обнуляет детали. Разрешены low grass, редкие камни, береговые наносы,
+небольшие цветочные группы, следы эрозии и единичное deadwood, если их
+contrast ниже primary silhouette.
+
+Water negative space сохраняет читаемую гладь: islands, reeds и rocks
+размещаются группами с крупными свободными интервалами, а не равномерной
+сеткой.
+
+### 6. Framing
+
+Framing использует вероятное view direction и не создаёт симметричную
+«фоторамку».
+
+Поддерживаемые механизмы:
+
+- foreground framing vegetation;
+- asymmetric cliff framing;
+- valley walls directing view;
+- river leading lines;
+- shoreline curvature;
+- controlled canopy gaps;
+- secondary islands or spurs offset from focal axis.
+
+Для каждой стороны focal corridor вычисляется независимый weight и seeded
+offset. Левая и правая формы не зеркалятся. Минимальная асимметрия проверяется
+по разнице высоты, длины или density двух framing sides.
+
+Canopy gap формируется снижением cluster eligibility вдоль широкого
+аналитического сектора. Отдельные деревья всё ещё могут пересекать сектор,
+поэтому раскрытие остаётся природным, а не вырубленным коридором.
+
+River leading line следует реальному downstream channel. Shoreline framing
+читает curvature coast field. Скалы не поворачиваются к фактической камере
+игрока.
+
+### 7. Landmark rarity and wonder budget
+
+Каждый composition cell `4 096 × 4 096` имеет детерминированный
+`wonder_budget`. Базовый диапазон — `4–12` wonder units; mood и rhythm могут
+перераспределять, но не создавать дополнительные units после неудачной
+попытки.
+
+Уровни:
+
+| Уровень | Примеры | Стоимость | Минимальная дистанция до равного уровня |
+|---|---|---:|---:|
+| local detail | rocks, logs, small springs | 0 | 8–64 |
+| minor landmark | grove, small grotto, minor fall | 1 | 256–768 |
+| regional landmark | giant tree, major arch, exceptional fall | 4 | 1 536–4 096 |
+| world landmark | floating massif, sacred cavern system, monumental formation | 12 | 8 192–20 000 |
+
+Distance выбирается по visual strength и silhouette footprint внутри указанного
+диапазона. Сильный объект всегда получает не меньшую дистанцию, чем более
+слабый объект того же уровня.
+
+World landmark требует отдельного rare anchor на сетке не мельче
+`16 384 × 16 384`, потребляет совокупный budget своей influence zone и
+запрещает конкурирующий regional/world landmark рядом. Его отсутствие в
+обследуемой области является нормальным результатом.
+
+Budget reservation происходит до feature attempt и является чистой функцией
+seed/anchor/type. Неудачная попытка из-за site constraints не отдаёт units
+случайному конкуренту в зависимости от порядка чанков. Допускается
+детерминированный заранее ранжированный fallback меньшего уровня.
+
+К wonder budget относятся:
+
+- floating islands;
+- giant trees;
+- monumental arches;
+- sacred grottos;
+- exceptional waterfalls;
+- unusual ice formations.
+
+Обычная геология, реки, лесные сообщества и surface detail не расходуют
+budget, но участвуют в visual hierarchy.
+
+### 8. Human-scale places
+
+Большой регион обязан включать защищённые места человеческого масштаба:
+
+- sheltered valley;
+- clearing;
+- coastal or river terrace;
+- natural building bench;
+- quiet lake;
+- short forest passage;
+- settlement-capable area.
+
+`scenic_site_score` объединяет:
+
+```text
+buildable_terrace_weight
++ route_access
++ water_access
++ shelter
++ vista/reveal value
+- flood_risk
+- extreme_slope
+- landmark_exclusion
+```
+
+Начальные требования к buildable candidate:
+
+- contiguous analytical area не меньше `32 × 32` блоков;
+- основной slope не больше `2` блоков на `8` по большинству sample edges;
+- отсутствует active channel и high floodplain weight;
+- пресная вода находится ориентировочно в `32–192` блоках либо site является
+  безопасной coastal terrace;
+- есть связь с route suitability corridor шириной минимум `12` блоков;
+- canopy/clutter допускают расчистку без уничтожения primary silhouette.
+
+Route network здесь означает аналитическую сеть проходимости: valley floors,
+saddles, river terraces, plateau passes и coast benches. Она не размещает
+дороги автоматически.
+
+На каждые `2 048 × 2 048` блоков пригодной суши требуется минимум один
+human-scale candidate либо явная диагностическая причина отсутствия:
+ocean, extreme protected massif, canyon core или glacier accumulation zone.
+
+### 9. Composition diagnostics
+
+Обязательные exports:
+
+- `openness.png`;
+- `dominant-silhouette.png`;
+- `focal-point-candidates.png`;
+- `vista-direction.png`;
+- `negative-space-coverage.png`;
+- `landmark-hierarchy.png`;
+- `wonder-budget-usage.png`;
+- `regional-rhythm.png`;
+- `buildable-scenic-sites.png`;
+- табличный `composition-metrics.json`.
+
+Метрики:
+
+- доля quiet/transitional/dramatic/recovery;
+- максимальная длина continuous dramatic corridor;
+- negative-space coverage;
+- число primary anchors без supporting/quiet space;
+- число конфликтующих regional/world influence zones;
+- wonder units available/reserved/placed/rejected;
+- vista candidates по archetype и focal range;
+- buildable scenic sites на `1 000` chunks;
+- доля sites с route и water access;
+- распределение openness и framing score.
+
+Для каждого seed visual review проверяет минимум:
+
+1. один дальний горный вид;
+2. одну спокойную долину;
+3. одно раскрытие из лесного corridor;
+4. одно выразительное озеро либо побережье;
+5. один регион без крупных landmarks;
+6. один world landmark, только если такой anchor присутствует в области
+   обследования.
+
+Review сохраняет seed, координаты, направление взгляда, shader state и
+идентификаторы dominant province/mood/rhythm. Обязательная доказательная
+серия снимается без shaders; shader-серия хранится отдельно.
+
+### 10. Anti-slop rules
+
+Запрещено считать художественную часть выполненной только из-за:
+
+- увеличенной высоты гор;
+- большого количества водопадов;
+- чрезмерно плотного леса;
+- множества арок;
+- постоянного тумана;
+- насыщенных материалов;
+- высокой плотности мелких деталей;
+- одного специально выбранного удачного seed.
+
+Красота подтверждается одновременно:
+
+- regional rhythm;
+- visual hierarchy;
+- читаемыми silhouettes;
+- measurable negative space;
+- разнообразием composition profiles;
+- wonder-budget discipline;
+- human-scale places;
+- повторяемостью требований на фиксированных 20 seed.
+
+Отдельный удачный screenshot является примером, но не acceptance evidence.
+Провал rhythm, hierarchy или negative-space metrics нельзя закрыть shader
+изображением.
+
 ## 14. Landmarks and procedural form quality
 
 ### 14.1 Eligibility
@@ -820,7 +1287,10 @@ worldgen/v2/
 │  ├─ LandformSampler
 │  ├─ HydrologyAtlas
 │  ├─ GlacierSampler
-│  └─ CaveProvinceSampler
+│  ├─ CaveProvinceSampler
+│  ├─ CompositionIntentAtlas
+│  ├─ CompositionSampler
+│  └─ WonderBudget
 ├─ cache/
 │  ├─ AtlasTileKey
 │  └─ BoundedTileCache
@@ -837,6 +1307,7 @@ worldgen/v2/
 │  └─ LandmarkSiteFilter
 └─ diagnostics/
    ├─ FieldExporter
+   ├─ CompositionExporter
    ├─ ChunkTimingRecorder
    └─ MultiSeedSuite
 ```
@@ -926,7 +1397,16 @@ baseline; выдумывать число без замера запрещено
 - slope;
 - glacier;
 - cave density/family;
-- landmark distribution.
+- landmark distribution;
+- openness;
+- dominant silhouette;
+- focal-point candidates;
+- vista direction;
+- negative-space coverage;
+- landmark hierarchy;
+- wonder-budget usage;
+- dramatic/quiet rhythm;
+- buildable scenic sites.
 
 Метрики:
 
@@ -939,6 +1419,12 @@ baseline; выдумывать число без замера запрещено
 - traversable surface;
 - cave family coverage;
 - landmark attempts/success/rejections per 1 000 chunks;
+- conflicting landmark influence zones;
+- wonder units reserved/placed/rejected;
+- quiet/dramatic/recovery coverage;
+- negative-space coverage;
+- vista archetype coverage;
+- buildable scenic sites with route/water access;
 - chunk mean/P95/P99;
 - far-chunk access and cascading warnings.
 
@@ -946,13 +1432,13 @@ baseline; выдумывать число без замера запрещено
 
 | Этап | Обязательный gate |
 |---|---|
-| 4 macro/provinces | deterministic maps, seams=0, >=6 provinces observed |
+| 4 macro/provinces | deterministic maps, seams=0, >=6 provinces observed, mood/rhythm intents exported |
 | 5 terrain systems | 4 mountain families, connected rivers, glacier/canyon samples |
 | 6 surfaces/vegetation | 53 matrix rows have explicit profile evidence |
 | 7 caves | Q1–Q6 observed and correlated with province |
-| 8 landmarks | all 13 counted, overlap/far-read checks pass |
-| 9 diagnostics | full 20-seed report and measured P95/P99 |
-| 10 final | acceptance table plus shader/no-shader screenshots |
+| 8 landmarks | all 13 counted, hierarchy/budget/overlap/far-read checks pass |
+| 9 diagnostics | full 20-seed report, composition exports and measured P95/P99 |
+| 10 final | acceptance table, composition review plus shader/no-shader screenshots |
 
 ## 18. Compatibility and migration
 
@@ -993,10 +1479,13 @@ dedicated-server smoke test этой оболочки.
 1. зарегистрировать делегирующий V2 chunk-generator codec;
 2. зарегистрировать V2 settings/preset параллельно legacy;
 3. реализовать field context, deterministic salts и province sampler;
-4. создать continent/ocean aggregate graph;
-5. реализовать минимум 6 наблюдаемых province masks;
-6. подключить province uplift/erosion без hydrology;
-7. экспортировать карты и выполнить codec/seam/determinism/server tests.
+4. реализовать composition intent atlas: mood, rhythm, hierarchy anchors и
+   wonder budget без placed landmarks;
+5. создать continent/ocean aggregate graph;
+6. реализовать минимум 6 наблюдаемых province masks;
+7. подключить province uplift/erosion и rhythm constraints без hydrology;
+8. экспортировать province/mood/rhythm/hierarchy maps и выполнить
+   codec/seam/determinism/server tests.
 
 ### Этап 5 — mountains, rivers, glaciers and canyons
 
@@ -1006,7 +1495,8 @@ dedicated-server smoke test этой оболочки.
 4. chunk-local elevated water pass;
 5. glacial mass balance fields;
 6. plateau/canyon incision;
-7. coast/ocean profiles.
+7. coast/ocean profiles;
+8. derived openness, silhouette, vista, negative-space и scenic-site fields.
 
 ### Этап 6 — surfaces and vegetation
 
@@ -1015,7 +1505,8 @@ dedicated-server smoke test этой оболочки.
 3. 53 soil/stone/surface profiles;
 4. vegetation community pools;
 5. altitude belts and nine ecotones;
-6. optional Nature's Spirit palettes.
+6. composition-driven clearings, clutter, canopy gaps и framing;
+7. optional Nature's Spirit palettes.
 
 ### Этап 7 — caves
 
@@ -1028,10 +1519,11 @@ dedicated-server smoke test этой оболочки.
 
 1. instrumentation всех 13 features;
 2. SiteAnalysis and overlap reservation;
-3. remove far-chunk reads;
-4. data-driven configurations;
-5. family-aware placement;
-6. shape decomposition and variants.
+3. hierarchy anchors and deterministic wonder reservation;
+4. remove far-chunk reads;
+5. data-driven configurations;
+6. family-aware placement;
+7. shape decomposition and variants.
 
 ### Этапы 9–10
 
@@ -1049,7 +1541,9 @@ dedicated-server smoke test этой оболочки.
   flow graph;
 - elevated water требует chunk-local generator pass;
 - surfaces собираются из fragments в generated JSON;
-- legacy и V2 получают разные settings IDs.
+- legacy и V2 получают разные settings IDs;
+- художественная композиция задаётся серверными analytical fields и
+  измеряется независимо от shaders.
 
 Оставшиеся риски:
 
@@ -1061,7 +1555,11 @@ dedicated-server smoke test этой оболочки.
 5. aquifer и elevated river water могут конфликтовать на cave entrances;
 6. швы старых миров нельзя убрать без регенерации;
 7. художественные targets требуют итераций после реальных карт и screenshots;
-8. текущие Java landmarks остаются техническим долгом до этапа 8.
+8. текущие Java landmarks остаются техническим долгом до этапа 8;
+9. analytical vista является вероятностной оценкой и может расходиться с
+   финальной видимостью после structures и vegetation;
+10. жёсткие composition thresholds могут сделать регионы однообразными, если
+    не проверить распределение на 20 seed.
 
 ## 21. Acceptance статуса архитектуры
 
@@ -1072,6 +1570,8 @@ dedicated-server smoke test этой оболочки.
 - отсутствуют циклические зависимости;
 - определены province, hydrology, glacial, coast, cave, surface и vegetation
   contracts;
+- определены mood, hierarchy, vista, rhythm, negative-space, framing,
+  wonder-budget и human-scale contracts;
 - определены performance rules и test gates;
 - определён versioning/migration path;
 - документ не выдаёт целевую систему за уже реализованную.
