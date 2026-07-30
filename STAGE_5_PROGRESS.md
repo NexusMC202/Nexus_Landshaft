@@ -56,16 +56,22 @@ Stages 6–10 have not been started.
   - bed above surface 0%;
   - floating water 0%;
   - buried channel 0%.
-- Fresh world `nexus-v2-stage5-envelope-smoke-g`:
-  - 18,757 channel columns attempted;
-  - 18,435 accepted before the targeted river-area extension;
-  - 85,674 blocks carved;
-  - 34,455 water blocks placed;
-  - 36,870 sediment blocks placed;
-  - 322 cave intersections rejected;
+- Fresh targeted world `nexus-v2-stage5-envelope-smoke-h`:
+  - 43,876 channel columns attempted;
+  - 42,601 accepted;
+  - 202,435 blocks carved;
+  - 78,926 water blocks placed;
+  - 85,202 sediment blocks placed;
+  - 819 terrain mismatches rejected;
+  - 456 cave intersections rejected;
+  - out-of-bounds attempts 0;
   - neighbour reads 0.
 - No registry, datapack, cascading-worldgen, deadlock or crash error was found
   in the accepted smoke logs.
+- GitHub Actions run
+  [30522875305](https://github.com/NexusMC202/Nexus_Landshaft/actions/runs/30522875305)
+  completed successfully on commit `6e985f2`: Java 21 setup, all JSON resource
+  parsing, clean Gradle build and deterministic/seam tests passed.
 
 ## Visually inspected
 
@@ -87,8 +93,8 @@ Stages 6–10 have not been started.
 - The four mountain families have separate fields/maps, but shape metrics and
   in-game examples for each family are incomplete.
 - Glacier mass affects terrain carve, but it is not yet a complete glacier.
-- CI workflow exists locally; it must not be reported as passing until the
-  pushed GitHub Actions run actually completes successfully.
+- CI is green for the current implementation, but it does not replace the
+  missing multi-seed and visual acceptance suite.
 
 ## Not implemented
 
@@ -109,14 +115,13 @@ Stages 6–10 have not been started.
 - P95/max analytical terrain error remains high in the original mountainous
   smoke area, largely where cave/terrain final-density modifications diverge
   from the envelope; this requires classification and reduction.
-- River pass had 46 vertically collapsed columns classified as out-of-bounds
-  in one targeted run. The classification has been corrected to terrain
-  mismatch, but a fresh run must prove `out_of_bounds.attempts=0`.
+- River pass previously classified vertically collapsed columns as
+  out-of-bounds. The classification was corrected and the fresh targeted run
+  proved `out_of_bounds.attempts=0`.
 - Physical lake and overflow water are absent.
 - Lattice/parallel/angle acceptance metrics do not yet exist.
 - No shader-free in-game screenshot has yet been captured for the confirmed
   river coordinate.
-- GitHub CI has not yet run on this revision.
 
 River-mask coverage is diagnostic context only and is not treated as evidence
 of river quality.
