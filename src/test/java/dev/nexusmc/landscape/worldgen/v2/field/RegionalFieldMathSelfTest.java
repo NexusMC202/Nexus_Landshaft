@@ -27,6 +27,7 @@ public final class RegionalFieldMathSelfTest {
         verifySyntheticCoverageAndRhythmBudget();
         verifyLandformChannels();
         verifyHydrologyGraph();
+        verifyActiveRiverNetworkQuality();
         verifyHydrologyRequestOrderAndThreads();
         verifyBasinSeamsAndConcurrency();
         System.out.println("RegionalFieldMathSelfTest: PASS");
@@ -386,6 +387,154 @@ public final class RegionalFieldMathSelfTest {
                     + Math.cos(z / 5_500.0 - x / 9_000.0) * 18.0;
             }
         };
+    }
+
+    private static void verifyActiveRiverNetworkQuality() {
+        HydrologyMath.NoiseSource noise = syntheticHydrologyNoise();
+        Map<Long, List<List<HydrologyMath.CenterlinePoint>>> incoming =
+            new HashMap<>();
+        Map<Long, List<HydrologyMath.CenterlinePoint>> outgoing =
+            new HashMap<>();
+        Map<Long, HydrologyMath.Node> nodes = new HashMap<>();
+        int routingSegments = 0;
+        int activeSegments = 0;
+        int downhillChecks = 0;
+        int downhillAccepted = 0;
+        double sinuositySum = 0.0;
+
+        for (int cellZ = -32; cellZ <= 32; cellZ++) {
+            for (int cellX = -32; cellX <= 32; cellX++) {
+                HydrologyMath.Node source =
+                    HydrologyMath.node(cellX, cellZ, noise);
+                HydrologyMath.Node target =
+                    HydrologyMath.downstream(source, noise);
+                nodes.put(source.id(), source);
+                if (target == null) {
+                    continue;
+                }
+                routingSegments++;
+                if (!HydrologyMath.isChannelSegment(source, target, noise)) {
+                    continue;
+                }
+                activeSegments++;
+                nodes.put(target.id(), target);
+                List<HydrologyMath.CenterlinePoint> points =
+                    HydrologyMath.segmentPoints(source, target, noise, 24);
+                outgoing.put(source.id(), points);
+                incoming.computeIfAbsent(
+                    target.id(),
+                    ignored -> new ArrayList<>()
+                ).add(points);
+                double chord = Math.hypot(
+                    target.x() - source.x(),
+                    target.z() - source.z()
+                );
+                double length = 0.0;
+                for (int index = 1; index < points.size(); index++) {
+                    HydrologyMath.CenterlinePoint previous =
+                        points.get(index - 1);
+                    HydrologyMath.CenterlinePoint point = points.get(index);
+                    length += Math.hypot(
+                        point.x() - previous.x(),
+                        point.z() - previous.z()
+                    );
+                    downhillChecks++;
+                    if (point.bedY() < previous.bedY()) {
+                        downhillAccepted++;
+                    }
+                }
+                sinuositySum += length / Math.max(1.0, chord);
+            }
+        }
+
+        int maximumTerminalInputs = 0;
+        List<Double> junctionAngles = new ArrayList<>();
+        for (Map.Entry<Long, List<List<HydrologyMath.CenterlinePoint>>> entry
+            : incoming.entrySet()) {
+            HydrologyMath.Node junction = nodes.get(entry.getKey());
+            if (junction == null) {
+                continue;
+            }
+            List<HydrologyMath.CenterlinePoint> outgoingPoints =
+                outgoing.get(junction.id());
+            if (outgoingPoints == null) {
+                maximumTerminalInputs = Math.max(
+                    maximumTerminalInputs,
+                    entry.getValue().size()
+                );
+                continue;
+            }
+            HydrologyMath.CenterlinePoint next = outgoingPoints.get(1);
+            for (List<HydrologyMath.CenterlinePoint> incomingPoints
+                : entry.getValue()) {
+                HydrologyMath.CenterlinePoint previous =
+                    incomingPoints.get(incomingPoints.size() - 2);
+                HydrologyMath.CenterlinePoint point =
+                    incomingPoints.get(incomingPoints.size() - 1);
+                junctionAngles.add(angleDegrees(
+                    point.x() - previous.x(),
+                    point.z() - previous.z(),
+                    next.x() - point.x(),
+                    next.z() - point.z()
+                ));
+            }
+        }
+        Collections.sort(junctionAngles);
+        double activeShare = activeSegments / (double)routingSegments;
+        double meanSinuosity = sinuositySum / activeSegments;
+        double p90Angle = junctionAngles.get(
+            (int)Math.floor((junctionAngles.size() - 1) * 0.90)
+        );
+        require(activeSegments > 300, "active river graph is too sparse");
+        require(
+            activeShare >= 0.35 && activeShare <= 0.72,
+            "active river share is outside quality budget: " + activeShare
+        );
+        require(
+            maximumTerminalInputs <= 3,
+            "terminal river star exceeds three inputs: " + maximumTerminalInputs
+        );
+        require(
+            meanSinuosity >= 1.025 && meanSinuosity <= 1.20,
+            "river sinuosity outside quality budget: " + meanSinuosity
+        );
+        require(
+            p90Angle <= 35.0,
+            "final centerline P90 junction angle is too sharp: " + p90Angle
+        );
+        require(
+            downhillAccepted == downhillChecks,
+            "centerline bed profile is not strictly downhill"
+        );
+        System.out.printf(
+            "active river network routing=%d active=%d share=%.3f "
+                + "terminalMax=%d sinuosity=%.4f junctionP90=%.2f downhill=PASS%n",
+            routingSegments,
+            activeSegments,
+            activeShare,
+            maximumTerminalInputs,
+            meanSinuosity,
+            p90Angle
+        );
+    }
+
+    private static double angleDegrees(
+        double firstX,
+        double firstZ,
+        double secondX,
+        double secondZ
+    ) {
+        double firstLength = Math.max(1.0E-9, Math.hypot(firstX, firstZ));
+        double secondLength = Math.max(1.0E-9, Math.hypot(secondX, secondZ));
+        double cosine = Math.max(
+            -1.0,
+            Math.min(
+                1.0,
+                (firstX * secondX + firstZ * secondZ)
+                    / (firstLength * secondLength)
+            )
+        );
+        return Math.toDegrees(Math.acos(cosine));
     }
 
     private static void verifyHydrologyRequestOrderAndThreads() {

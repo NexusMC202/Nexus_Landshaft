@@ -3,8 +3,8 @@ package dev.nexusmc.landscape.worldgen.v2.hydrology;
 import dev.nexusmc.landscape.worldgen.v2.field.NexusV2Noises;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.synth.NormalNoise;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Runtime diagnostic/placement view of the exact noises used by the
@@ -15,7 +15,9 @@ public final class NexusV2HydrologySampler {
     private final NormalNoise layout;
     private final NormalNoise tributary;
     private final NormalNoise elevation;
-    private final Map<Long, Double> terrainYCache = new HashMap<>();
+    private final Map<Long, Double> terrainYCache = new ConcurrentHashMap<>();
+    private final Map<Long, Boolean> channelSegmentCache =
+        new ConcurrentHashMap<>();
     private final HydrologyMath.NoiseSource source;
 
     public NexusV2HydrologySampler(RandomState randomState) {
@@ -41,6 +43,17 @@ public final class NexusV2HydrologySampler {
 
     public HydrologyMath.Node downstream(HydrologyMath.Node node) {
         return HydrologyMath.downstream(node, source);
+    }
+
+    public boolean isChannelSegment(
+        HydrologyMath.Node sourceNode,
+        HydrologyMath.Node targetNode
+    ) {
+        return HydrologyMath.isChannelSegment(
+            sourceNode,
+            targetNode,
+            source
+        );
     }
 
     public HydrologyMath.NodeInfo nodeInfo(HydrologyMath.Node node) {
@@ -93,6 +106,19 @@ public final class NexusV2HydrologySampler {
                 double sampled = terrain.analyticalTerrain(blockX, blockZ).surfaceY();
                 terrainYCache.put(key, sampled);
                 return sampled;
+            }
+
+            @Override
+            public Boolean cachedChannelSegment(long canonicalNodeId) {
+                return channelSegmentCache.get(canonicalNodeId);
+            }
+
+            @Override
+            public void cacheChannelSegment(
+                long canonicalNodeId,
+                boolean active
+            ) {
+                channelSegmentCache.put(canonicalNodeId, active);
             }
         };
     }

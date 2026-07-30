@@ -55,13 +55,12 @@ public final class HydrologyMath {
             }
         }
 
-        if (bestSource != null) {
+        boolean activeSegment = bestSource != null
+            && isChannelSegment(bestSource, bestTarget, noise);
+        if (activeSegment) {
             bestOrder = streamOrder(bestSource, bestTarget, noise);
             bestAccumulation = upstreamAccumulation(bestSource, noise, 5);
             bestSegmentId = bestSource.id;
-            double localTerrainY = noise.terrainY(blockX, blockZ);
-            double maximumIncision = 4.5 + bestOrder * 1.5;
-            bestBedY = Math.max(bestBedY, localTerrainY - maximumIncision);
             bestWaterY = bestBedY + 1.15 + bestOrder * 0.35;
         }
         double halfWidth = BASE_HALF_WIDTH + bestOrder * 7.0;
@@ -69,7 +68,7 @@ public final class HydrologyMath {
         return new Sample(
             bestDistance,
             bestDistance - BASE_HALF_WIDTH,
-            clamp01(mask),
+            activeSegment ? clamp01(mask) : 0.0,
             bestOrder,
             bestAccumulation,
             bestSegmentId,
@@ -136,6 +135,120 @@ public final class HydrologyMath {
             }
         }
         return best;
+    }
+
+    /**
+     * Selects the hydrologically visible graph from the denser routing graph.
+     * Every accumulated segment remains active. A bounded subset of steep
+     * first-order headwaters is retained so rivers have sources without
+     * turning every local sink into an eight-armed star.
+     */
+    public static boolean isChannelSegment(
+        Node source,
+        Node target,
+        NoiseSource noise
+    ) {
+        if (target == null) {
+            return false;
+        }
+        Boolean cached = noise.cachedChannelSegment(source.id);
+        if (cached != null) {
+            return cached;
+        }
+        boolean active;
+        if (hasImmediateUpstream(source, noise)) {
+            active = true;
+        } else {
+            double drop = source.bedY - target.bedY;
+            long selector = mix64(source.id ^ 0x3C6EF372FE94F82BL);
+            boolean mountainHeadwater = source.terrainY >= 120.0
+                && drop >= 5.0
+                && Math.floorMod(selector, 4L) == 0L;
+            boolean waterfallHeadwater = drop >= 16.0
+                && Math.floorMod(selector, 3L) == 0L;
+            active = mountainHeadwater || waterfallHeadwater;
+        }
+        if (!active) {
+            noise.cacheChannelSegment(source.id, false);
+            return false;
+        }
+        boolean result = downstream(target, noise) != null
+            || terminalIncomingRank(source, target, noise) < 3;
+        noise.cacheChannelSegment(source.id, result);
+        return result;
+    }
+
+    private static int terminalIncomingRank(
+        Node source,
+        Node terminal,
+        NoiseSource noise
+    ) {
+        double sourceScore = terminalIncomingScore(source, noise);
+        int rank = 0;
+        for (int dz = -1; dz <= 1; dz++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                if (dx == 0 && dz == 0) {
+                    continue;
+                }
+                Node candidate = node(
+                    terminal.cellX + dx,
+                    terminal.cellZ + dz,
+                    noise
+                );
+                Node candidateTarget = downstream(candidate, noise);
+                if (candidateTarget == null
+                    || candidateTarget.id != terminal.id
+                    || candidate.id == source.id) {
+                    continue;
+                }
+                if (terminalIncomingScore(candidate, noise) < sourceScore) {
+                    rank++;
+                }
+            }
+        }
+        return rank;
+    }
+
+    private static double terminalIncomingScore(
+        Node source,
+        NoiseSource noise
+    ) {
+        int feeders = immediateUpstreamCount(source, noise);
+        double tieBreak =
+            (mix64(source.id ^ 0xA54FF53A5F1D36F1L) & 0xFFFFL)
+                / 65535.0;
+        return -feeders * 1_000.0 + source.routingY + tieBreak * 0.01;
+    }
+
+    private static boolean hasImmediateUpstream(
+        Node node,
+        NoiseSource noise
+    ) {
+        return immediateUpstreamCount(node, noise) > 0;
+    }
+
+    private static int immediateUpstreamCount(
+        Node node,
+        NoiseSource noise
+    ) {
+        int count = 0;
+        for (int dz = -1; dz <= 1; dz++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                if (dx == 0 && dz == 0) {
+                    continue;
+                }
+                Node candidate = node(
+                    node.cellX + dx,
+                    node.cellZ + dz,
+                    noise
+                );
+                Node target = downstream(candidate, noise);
+                if (target != null && target.id == node.id) {
+                    count++;
+                }
+            }
+        }
+        return count;
     }
 
     public static NodeInfo nodeInfo(Node node, NoiseSource noise) {
@@ -438,6 +551,7 @@ public final class HydrologyMath {
                 Node neighbour = node(source.cellX + dx, source.cellZ + dz, noise);
                 Node neighbourTarget = downstream(neighbour, noise);
                 if (neighbourTarget != null
+                    && isChannelSegment(neighbour, neighbourTarget, noise)
                     && neighbourTarget.cellX == source.cellX
                     && neighbourTarget.cellZ == source.cellZ) {
                     incoming++;
@@ -454,17 +568,50 @@ public final class HydrologyMath {
         double dx = target.x - source.x;
         double dz = target.z - source.z;
         double length = Math.max(1.0E-9, Math.hypot(dx, dz));
-        double bend = noise.tributary(
+        double chordX = dx / length;
+        double chordZ = dz / length;
+        Node targetDownstream = downstream(target, noise);
+        double endDirectionX = chordX;
+        double endDirectionZ = chordZ;
+        if (targetDownstream != null) {
+            double outgoingX = targetDownstream.x - target.x;
+            double outgoingZ = targetDownstream.z - target.z;
+            double outgoingLength = Math.max(
+                1.0E-9,
+                Math.hypot(outgoingX, outgoingZ)
+            );
+            endDirectionX = outgoingX / outgoingLength;
+            endDirectionZ = outgoingZ / outgoingLength;
+        }
+        double primaryNoise = noise.tributary(
             midpointX / 3_072.0,
             midpointZ / 3_072.0
-        ) * Math.min(520.0, length * 0.28);
+        );
+        double secondaryNoise = noise.tributary(
+            midpointX / 1_379.0 + 41.0,
+            midpointZ / 1_379.0 - 73.0
+        );
+        double sign = Math.abs(primaryNoise) < 0.04
+            ? ((mix64(source.id ^ target.id) & 1L) == 0L ? -1.0 : 1.0)
+            : Math.signum(primaryNoise);
+        double primaryBend = sign
+            * length
+            * (0.10 + Math.abs(primaryNoise) * 0.10);
+        double secondaryBend = length * secondaryNoise * 0.065;
+        double tangentLength = length * 0.62;
         return new Curve(
             source.x,
             source.z,
-            midpointX - dz / length * bend,
-            midpointZ + dx / length * bend,
             target.x,
-            target.z
+            target.z,
+            chordX * tangentLength,
+            chordZ * tangentLength,
+            endDirectionX * tangentLength,
+            endDirectionZ * tangentLength,
+            -chordZ,
+            chordX,
+            primaryBend,
+            secondaryBend
         );
     }
 
@@ -473,7 +620,7 @@ public final class HydrologyMath {
         double bestT = 0.0;
         double previousX = curve.startX;
         double previousZ = curve.startZ;
-        final int subdivisions = 12;
+        final int subdivisions = 16;
         for (int index = 1; index <= subdivisions; index++) {
             double endT = index / (double)subdivisions;
             double endX = curveX(curve, endT);
@@ -500,27 +647,59 @@ public final class HydrologyMath {
     }
 
     private static double curveX(Curve curve, double t) {
-        double inverse = 1.0 - t;
-        return inverse * inverse * curve.startX
-            + 2.0 * inverse * t * curve.controlX
-            + t * t * curve.endX;
+        return hermite(
+            curve.startX,
+            curve.endX,
+            curve.startTangentX,
+            curve.endTangentX,
+            t
+        ) + curve.normalX * lateralOffset(curve, t);
     }
 
     private static double curveZ(Curve curve, double t) {
-        double inverse = 1.0 - t;
-        return inverse * inverse * curve.startZ
-            + 2.0 * inverse * t * curve.controlZ
-            + t * t * curve.endZ;
+        return hermite(
+            curve.startZ,
+            curve.endZ,
+            curve.startTangentZ,
+            curve.endTangentZ,
+            t
+        ) + curve.normalZ * lateralOffset(curve, t);
     }
 
     private static double tangentX(Curve curve, double t) {
-        return 2.0 * (1.0 - t) * (curve.controlX - curve.startX)
-            + 2.0 * t * (curve.endX - curve.controlX);
+        double lower = Math.max(0.0, t - 1.0E-4);
+        double upper = Math.min(1.0, t + 1.0E-4);
+        return curveX(curve, upper) - curveX(curve, lower);
     }
 
     private static double tangentZ(Curve curve, double t) {
-        return 2.0 * (1.0 - t) * (curve.controlZ - curve.startZ)
-            + 2.0 * t * (curve.endZ - curve.controlZ);
+        double lower = Math.max(0.0, t - 1.0E-4);
+        double upper = Math.min(1.0, t + 1.0E-4);
+        return curveZ(curve, upper) - curveZ(curve, lower);
+    }
+
+    private static double hermite(
+        double start,
+        double end,
+        double startTangent,
+        double endTangent,
+        double t
+    ) {
+        double t2 = t * t;
+        double t3 = t2 * t;
+        return (2.0 * t3 - 3.0 * t2 + 1.0) * start
+            + (t3 - 2.0 * t2 + t) * startTangent
+            + (-2.0 * t3 + 3.0 * t2) * end
+            + (t3 - t2) * endTangent;
+    }
+
+    private static double lateralOffset(Curve curve, double t) {
+        double sine = Math.sin(Math.PI * t);
+        double envelope = sine * sine;
+        return envelope * (
+            curve.primaryBend
+                + curve.secondaryBend * Math.sin(Math.PI * 2.0 * t)
+        );
     }
 
     private static double smoothstep(double edge0, double edge1, double value) {
@@ -560,6 +739,16 @@ public final class HydrologyMath {
         double elevation(double x, double z);
 
         double terrainY(double x, double z);
+
+        default Boolean cachedChannelSegment(long canonicalNodeId) {
+            return null;
+        }
+
+        default void cacheChannelSegment(
+            long canonicalNodeId,
+            boolean active
+        ) {
+        }
     }
 
     public record Sample(
@@ -657,10 +846,16 @@ public final class HydrologyMath {
     private record Curve(
         double startX,
         double startZ,
-        double controlX,
-        double controlZ,
         double endX,
-        double endZ
+        double endZ,
+        double startTangentX,
+        double startTangentZ,
+        double endTangentX,
+        double endTangentZ,
+        double normalX,
+        double normalZ,
+        double primaryBend,
+        double secondaryBend
     ) {
     }
 

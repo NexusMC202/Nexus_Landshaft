@@ -32,6 +32,14 @@ Stages 6–10 have not been started.
 - Diagnostics export raw drainage graph, final warped centerlines, defect
   overlay, canonical/final order, water level, local atlas crops and terrain
   error classifications.
+- The dense routing graph is no longer rendered wholesale. The active network
+  keeps accumulated trunks plus a bounded selection of steep headwaters.
+- Final centerlines use a Hermite profile with a shared junction tangent and
+  deterministic meander components. Terminal nodes retain at most their three
+  strongest incoming channels, preventing four-to-eight-arm sink stars.
+- Diagnostic sampling memoizes the deterministic active-segment decision by
+  canonical node ID. This changes no field values and avoids repeated graph
+  traversal during large atlas and case scans.
 
 ## Synthetic verified
 
@@ -41,6 +49,13 @@ Stages 6–10 have not been started.
   - 156 confluences and bounded terminal/lake profiles;
   - 664 reverse-order and four-thread graph queries;
   - one open lake and 34 deterministic overflow profiles.
+- Active-network regression test:
+  - 4,211 routing segments and 2,779 active segments;
+  - active share 0.660 in the synthetic stress field;
+  - maximum terminal inputs 3;
+  - mean sinuosity 1.0609;
+  - final centerline junction-angle P90 17.03°;
+  - every sampled centerline bed step strictly downhill.
 - Basin seam suite passes 656 samples over six targeted basins and 17
   continuity transitions. It compares basin ID, outlet ID, reason, mask,
   shoreline weight, bed Y, water Y and radial distance at:
@@ -119,19 +134,37 @@ Fresh targeted runtime worlds:
   - neighbour reads and out-of-bounds attempts: 0.
 
 Saved evidence is under `docs/worldgen/stage5/`, grouped by seed and case.
+The post-filter case scans for seeds `240802`, `918273645` and `-41027` are
+saved under `docs/worldgen/stage5/network-v2-cases/`.
 
-Measured network diagnostics for seed `-41027`:
+Fresh active-network runtime worlds:
 
-- segment length P10/P50/P90: 744.28 / 1,018.70 / 1,135.45 blocks;
+- Confluence, seed `-41027`, `X=-30224 Z=-48783`, radius 6 chunks:
+  - attempted channel columns: 22,970;
+  - accepted channel columns: 20,613;
+  - water blocks placed: 15,312;
+  - neighbour reads and out-of-bounds attempts: 0.
+- Deterministic overflow, seed `-41027`, `X=-19542 Z=-48020`,
+  radius 6 chunks:
+  - overflow columns: 5,812;
+  - basin water blocks: 7,082;
+  - mask leaks, floating water, isolated columns and water-level mismatches: 0;
+  - neighbour reads and out-of-bounds attempts: 0.
+
+Final active-network diagnostics for seed `-41027`:
+
+- routing presentation reduced from 4,188 to 1,669 visible segments;
+- river-mask coverage reduced from 21.66% to 8.25%;
+- segment length P10/P50/P90: 771.59 / 1,047.05 / 1,187.62 blocks;
 - short branches: 0;
-- angle P10/P50/P90: 0.96° / 43.53° / 88.78°;
+- final tangent angle P10/P50/P90: 1.50° / 11.74° / 22.45°;
 - parallel channels: 0;
-- right-angle junctions: 415;
-- sink stars: 232;
-- mean confluence angle: 37.90°;
-- mean sinuosity: 1.0041;
-- trunk continuity: 93.66%;
-- monotonically downhill sampled centerline: 93.72%;
+- right-angle junctions: 0, down from 415;
+- sink stars: 0, down from 232;
+- mean confluence angle: 11.88°;
+- mean sinuosity: 1.0468, up from 1.0041;
+- trunk continuity: 100.00%, up from 93.66%;
+- monotonically downhill sampled centerline: 99.99%, up from 93.72%;
 - canonical/final order mismatches: 0.
 
 ## Visually accepted
@@ -142,9 +175,6 @@ they are not substitutes for the required in-game screenshots with F3.
 ## Failed
 
 - Stage 5 is not accepted or complete.
-- River-network quality is not accepted: the current atlas exposes 415
-  right-angle junctions, 232 sink-star defects, low mean sinuosity (1.0041),
-  and only 93.72% monotonically downhill centerline samples.
 - Shader-free in-game screenshots are still missing for top view, along-river
   view, cross-section, bank, outlet/overflow and F3 seed/coordinates.
 - No case is marked visually accepted from an analytical image alone.

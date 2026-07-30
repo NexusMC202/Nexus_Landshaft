@@ -238,6 +238,10 @@ public final class WorldgenSurvey {
                         HydrologyMath.Node neighbourTarget =
                             hydrology.downstream(neighbour);
                         if (neighbourTarget != null
+                            && hydrology.isChannelSegment(
+                                neighbour,
+                                neighbourTarget
+                            )
                             && neighbourTarget.id() == node.id()) {
                             incoming++;
                         }
@@ -252,6 +256,7 @@ public final class WorldgenSurvey {
                     );
                 }
                 if (downstream != null
+                    && hydrology.isChannelSegment(node, downstream)
                     && node.terrainY() >= 145.0
                     && node.terrainY() - downstream.terrainY() >= 5.0) {
                     recordCase(
@@ -770,6 +775,7 @@ public final class WorldgenSurvey {
 
         List<NetworkSegment> segments = new ArrayList<>();
         Map<Long, List<NetworkSegment>> incoming = new HashMap<>();
+        Map<Long, NetworkSegment> outgoingSegments = new HashMap<>();
         Map<Long, HydrologyMath.Node> nodes = new HashMap<>();
         List<Double> lengths = new ArrayList<>();
         double sinuositySum = 0.0;
@@ -782,7 +788,8 @@ public final class WorldgenSurvey {
                 HydrologyMath.Node source = hydrology.node(cellX, cellZ);
                 HydrologyMath.Node target = hydrology.downstream(source);
                 nodes.put(source.id(), source);
-                if (target == null) {
+                if (target == null
+                    || !hydrology.isChannelSegment(source, target)) {
                     continue;
                 }
                 nodes.put(target.id(), target);
@@ -824,6 +831,7 @@ public final class WorldgenSurvey {
                     warpedLength / Math.max(1.0, rawLength)
                 );
                 segments.add(segment);
+                outgoingSegments.put(source.id(), segment);
                 incoming.computeIfAbsent(
                     target.id(),
                     ignored -> new ArrayList<>()
@@ -889,8 +897,8 @@ public final class WorldgenSurvey {
             if (junction == null) {
                 continue;
             }
-            HydrologyMath.Node outgoing = hydrology.downstream(junction);
-            if (outgoing == null && entry.getValue().size() >= 4) {
+            NetworkSegment outgoingSegment = outgoingSegments.get(junction.id());
+            if (outgoingSegment == null && entry.getValue().size() >= 4) {
                 sinkStars++;
                 drawWorldPoint(
                     defects,
@@ -903,16 +911,15 @@ public final class WorldgenSurvey {
                     2
                 );
             }
-            if (outgoing == null) {
+            if (outgoingSegment == null) {
                 continue;
             }
             trunkJunctions++;
             double bestAngle = 180.0;
             for (NetworkSegment incomingSegment : entry.getValue()) {
                 double angle = continuationAngle(
-                    incomingSegment.source(),
-                    junction,
-                    outgoing
+                    incomingSegment,
+                    outgoingSegment
                 );
                 angles.add(angle);
                 confluenceAngleSum += angle;
@@ -1091,15 +1098,23 @@ public final class WorldgenSurvey {
     }
 
     private static double continuationAngle(
-        HydrologyMath.Node source,
-        HydrologyMath.Node junction,
-        HydrologyMath.Node target
+        NetworkSegment incoming,
+        NetworkSegment outgoing
     ) {
+        List<HydrologyMath.CenterlinePoint> incomingPoints =
+            incoming.points();
+        List<HydrologyMath.CenterlinePoint> outgoingPoints =
+            outgoing.points();
+        HydrologyMath.CenterlinePoint previous =
+            incomingPoints.get(incomingPoints.size() - 2);
+        HydrologyMath.CenterlinePoint junction =
+            incomingPoints.get(incomingPoints.size() - 1);
+        HydrologyMath.CenterlinePoint next = outgoingPoints.get(1);
         return directedAngle(
-            junction.x() - source.x(),
-            junction.z() - source.z(),
-            target.x() - junction.x(),
-            target.z() - junction.z()
+            junction.x() - previous.x(),
+            junction.z() - previous.z(),
+            next.x() - junction.x(),
+            next.z() - junction.z()
         );
     }
 
