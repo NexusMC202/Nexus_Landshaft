@@ -68,6 +68,14 @@ tasks.register('regionalFieldTest', JavaExec) {
     mainClass = 'dev.nexusmc.landscape.worldgen.v2.field.RegionalFieldMathSelfTest'
 }
 
+tasks.register('stage6SurfaceTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks all 53 Stage 6 surface profiles and pure selection rules.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.surface.SurfaceProfileSelfTest'
+}
+
 tasks.named('check') {
-    dependsOn regionalFieldTest
+    dependsOn regionalFieldTest, stage6SurfaceTest
 }

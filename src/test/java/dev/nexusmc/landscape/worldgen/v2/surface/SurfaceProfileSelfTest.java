@@ -1,0 +1,225 @@
+package dev.nexusmc.landscape.worldgen.v2.surface;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+/**
+ * Framework-free Stage 6 profile and pure-selection checks.
+ */
+public final class SurfaceProfileSelfTest {
+    private static final Set<String> EXPECTED = Set.of(
+        "plains", "sunflower_plains", "snowy_plains", "ice_spikes", "desert",
+        "swamp", "mangrove_swamp", "forest", "flower_forest", "birch_forest",
+        "dark_forest", "old_growth_birch_forest", "old_growth_pine_taiga",
+        "old_growth_spruce_taiga", "taiga", "snowy_taiga", "savanna",
+        "savanna_plateau", "windswept_hills", "windswept_gravelly_hills",
+        "windswept_forest", "windswept_savanna", "jungle", "sparse_jungle",
+        "bamboo_jungle", "badlands", "eroded_badlands", "wooded_badlands",
+        "meadow", "cherry_grove", "grove", "snowy_slopes", "frozen_peaks",
+        "jagged_peaks", "stony_peaks", "river", "frozen_river", "beach",
+        "snowy_beach", "stony_shore", "warm_ocean", "lukewarm_ocean",
+        "deep_lukewarm_ocean", "ocean", "deep_ocean", "cold_ocean",
+        "deep_cold_ocean", "frozen_ocean", "deep_frozen_ocean",
+        "mushroom_fields", "dripstone_caves", "lush_caves", "deep_dark"
+    );
+
+    private SurfaceProfileSelfTest() {
+    }
+
+    public static void main(String[] arguments) {
+        verifyCompleteCatalog();
+        verifyEveryProfileIsStructured();
+        verifyZonePrecedence();
+        verifyOrderIndependence();
+        verifyThreadSafety();
+        System.out.println("SurfaceProfileSelfTest: PASS profiles=53");
+    }
+
+    private static void verifyCompleteCatalog() {
+        Set<String> expectedIds = new HashSet<>();
+        for (String path : EXPECTED) {
+            expectedIds.add("minecraft:" + path);
+        }
+        require(
+            SurfaceProfileCatalog.profiles().keySet().equals(expectedIds),
+            "catalog mismatch missing="
+                + difference(expectedIds, SurfaceProfileCatalog.profiles().keySet())
+                + " extra="
+                + difference(SurfaceProfileCatalog.profiles().keySet(), expectedIds)
+        );
+    }
+
+    private static void verifyEveryProfileIsStructured() {
+        Set<String> profileIds = new HashSet<>();
+        for (SurfaceProfile profile : SurfaceProfileCatalog.profiles().values()) {
+            require(
+                profileIds.add(profile.profileId()),
+                "duplicate profile id " + profile.profileId()
+            );
+            require(
+                profile.visualTraits().size() >= 3,
+                "fewer than three traits for " + profile.biomeId()
+            );
+            require(
+                profile.layers().top().stream().noneMatch(id -> id.contains("vanilla")),
+                "vanilla sentinel in " + profile.biomeId()
+            );
+            SurfaceSelection selection = SurfaceProfileResolver.resolve(
+                profile,
+                context(0.0, 0.0, 0.0, 0.0, 72.0, 0.08)
+            );
+            require(
+                selection.zone() == SurfaceSelection.Zone.BASE,
+                "neutral context did not select BASE for " + profile.biomeId()
+            );
+        }
+    }
+
+    private static void verifyZonePrecedence() {
+        SurfaceProfile profile = SurfaceProfileCatalog.require("minecraft:plains");
+        requireZone(profile, context(0.9, 0.8, 0.9, 0.9, 220.0, 0.8),
+            SurfaceSelection.Zone.CHANNEL);
+        requireZone(profile, context(0.0, 0.8, 0.9, 0.9, 220.0, 0.8),
+            SurfaceSelection.Zone.LAKE_SHORE);
+        requireZone(profile, context(0.0, 0.0, 0.0, 0.8, 220.0, 0.8),
+            SurfaceSelection.Zone.COAST);
+        requireZone(profile, context(0.0, 0.0, 0.0, 0.0, 220.0, 0.8),
+            SurfaceSelection.Zone.ALPINE);
+        requireZone(profile, context(0.0, 0.0, 0.0, 0.0, 80.0, 0.8),
+            SurfaceSelection.Zone.EXPOSED_SLOPE);
+    }
+
+    private static void verifyOrderIndependence() {
+        List<String> ids = new ArrayList<>(
+            SurfaceProfileCatalog.profiles().keySet()
+        );
+        List<SurfaceSelection> baseline = resolve(ids);
+        List<String> reversed = new ArrayList<>(ids);
+        Collections.reverse(reversed);
+        List<SurfaceSelection> reverseResults = resolve(reversed);
+        Collections.reverse(reverseResults);
+        require(
+            baseline.equals(reverseResults),
+            "surface selection changed with reverse query order"
+        );
+    }
+
+    private static void verifyThreadSafety() {
+        List<String> ids = new ArrayList<>(
+            SurfaceProfileCatalog.profiles().keySet()
+        );
+        List<SurfaceSelection> expected = resolve(ids);
+        ExecutorService executor = Executors.newFixedThreadPool(4);
+        try {
+            List<Future<SurfaceSelection>> futures = new ArrayList<>();
+            for (String id : ids) {
+                futures.add(executor.submit(() -> resolve(id)));
+            }
+            for (int index = 0; index < futures.size(); index++) {
+                try {
+                    require(
+                        expected.get(index).equals(futures.get(index).get()),
+                        "parallel selection mismatch for " + ids.get(index)
+                    );
+                } catch (Exception exception) {
+                    throw new AssertionError(
+                        "parallel surface selection failed",
+                        exception
+                    );
+                }
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    private static List<SurfaceSelection> resolve(List<String> ids) {
+        List<SurfaceSelection> result = new ArrayList<>();
+        for (String id : ids) {
+            result.add(resolve(id));
+        }
+        return result;
+    }
+
+    private static SurfaceSelection resolve(String biomeId) {
+        int index = Math.floorMod(biomeId.hashCode(), 997);
+        double riverMask = index % 11 == 0 ? 0.55 : 0.0;
+        double lakeMask = index % 13 == 0 ? 0.35 : 0.0;
+        double coast = index % 7 == 0 ? 0.70 : 0.0;
+        double volcanic = index % 17 == 0 ? 0.68 : 0.0;
+        double elevation = 62.0 + index * 2.0;
+        double slope = (index % 9) / 10.0;
+        return SurfaceProfileResolver.resolve(
+            SurfaceProfileCatalog.require(biomeId),
+            context(
+                riverMask,
+                lakeMask,
+                volcanic,
+                coast,
+                elevation,
+                slope
+            )
+        );
+    }
+
+    private static SurfaceContext context(
+        double riverMask,
+        double lakeMask,
+        double volcanic,
+        double coast,
+        double elevation,
+        double slope
+    ) {
+        return new SurfaceContext(
+            0.0,
+            0.0,
+            0.1,
+            0.0,
+            0.0,
+            elevation,
+            slope,
+            riverMask > 0.0 ? 0.0 : 128.0,
+            riverMask,
+            lakeMask,
+            coast,
+            0.2,
+            volcanic,
+            elevation > 170.0 ? 0.6 : 0.0,
+            0.1,
+            0.1,
+            0.0,
+            0.0
+        );
+    }
+
+    private static void requireZone(
+        SurfaceProfile profile,
+        SurfaceContext context,
+        SurfaceSelection.Zone expected
+    ) {
+        SurfaceSelection.Zone actual =
+            SurfaceProfileResolver.resolve(profile, context).zone();
+        require(
+            actual == expected,
+            "zone precedence expected=" + expected + " actual=" + actual
+        );
+    }
+
+    private static Set<String> difference(Set<String> left, Set<String> right) {
+        Set<String> result = new HashSet<>(left);
+        result.removeAll(right);
+        return result;
+    }
+
+    private static void require(boolean condition, String message) {
+        if (!condition) {
+            throw new AssertionError(message);
+        }
+    }
+}

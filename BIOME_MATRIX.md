@@ -1,8 +1,8 @@
 # Nexus Landscape — матрица 53 Overworld-биомов
 
-Статус документа: целевой контракт V2, не описание уже реализованного мира.  
+Статус документа: целевой контракт этапа 6, не описание уже реализованного мира.
 Minecraft: `1.21.1`  
-Основание: `WORLDGEN_AUDIT.md`, этап 2 технического задания.
+Основание: `STAGE_6_AUDIT.md` и проверенные resources `nexus_v2`.
 
 ## 1. Назначение
 
@@ -21,6 +21,15 @@ Overworld-биомов. Строка считается реализованно
 
 Наличие биома в `minecraft:overworld` multi-noise source не означает
 выполнение строки.
+
+Требуемые поля распределены между таблицами без неявных `vanilla`-строк:
+
+- Matrix A: terrain family, surface/subsurface palette, exposed rock и erosion;
+- Matrix B: river/coast affinity, water/groundwater response и cave relation;
+- Matrix C: vegetation structure, dominant tree shape, undergrowth, landmark,
+  transition и визуальные признаки;
+- Matrix D: macro climate, preferred elevation/slope, explicit affinities,
+  optional integration, implementation и test status.
 
 Порядок будущей генерации:
 
@@ -360,11 +369,79 @@ Geological province должен выбираться раньше биома. �
 6. Rare landmark не может использоваться для достижения минимального размера
    региона.
 
-## 8. Implementation status
+## 8. Matrix D — climate, диапазоны и проверяемый статус
+
+Обозначения elevation: `L` до 80, `M` 70–128, `H` 112–192, `A` выше 176,
+`U` underground, `S` sea floor. Диапазоны пересекаются намеренно и должны
+смешиваться плавно. Slope — подъём на 4 горизонтальных блока:
+`flat` 0–2, `gentle` 0–5, `rolling` 2–10, `steep` 8–24, `cliff` 20+.
+
+`NS optional` означает только безопасное разрешение registry ID при наличии
+Nature’s Spirit; `vanilla fallback` обязателен. На момент аудита resolver ещё
+не реализован, поэтому статус всех optional записей — `planned`.
+
+| Biome ID | Macro climate | Elevation | Slope | River affinity | Coast affinity | Groundwater/wetness | Optional integration | Distinction contract | Implementation | Tests |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `minecraft:plains` | temperate continental | L–M | flat/gentle | high floodplain | medium low coast | medium; wet pockets | NS shrubs, vanilla fallback | levees + oak groups + loam palette | planned | not run |
+| `minecraft:sunflower_plains` | warm temperate | L–M | flat/gentle | medium | low | low/medium | NS meadow plants, fallback | loess terrace + flower mosaics + open canopy | planned | not run |
+| `minecraft:snowy_plains` | subpolar continental | L–M | flat/rolling | medium/frozen | medium polar | low; thermokarst pockets | NS cold shrubs, fallback | snow drifts + frozen loam + shelter trees | planned | not run |
+| `minecraft:ice_spikes` | polar dry | L–H | rolling/steep | low/frozen | medium polar | frozen pockets | none required | moraine + coherent ice field + bare cover | planned | not run |
+| `minecraft:desert` | hot arid | L–H | flat/rolling | seasonal/wadi | medium arid | very low; oasis high | NS arid plants/palm, fallback | dune/hamada + sandstone exposure + clustered scrub | planned | not run |
+| `minecraft:swamp` | temperate humid | L | flat | very high/distributary | high estuary | saturated | NS willow/reeds, fallback | mud islands + open water network + layered wet canopy | planned | not run |
+| `minecraft:mangrove_swamp` | tropical coastal humid | L | flat | very high/tidal | very high | tidal/saturated | NS coastal plants, fallback | tidal creeks + root-height zones + mudflat | planned | not run |
+| `minecraft:forest` | temperate humid | L–M | gentle/rolling | medium/high | low/medium | medium | NS deciduous accents, fallback | mixed canopy clusters + fern edge + loam/rock gaps | planned | not run |
+| `minecraft:flower_forest` | temperate humid | L–H | gentle/rolling | medium | low | medium/high pockets | NS flowers, fallback | moisture flower mosaics + open canopy + karst bowls | planned | not run |
+| `minecraft:birch_forest` | cool temperate | L–M | gentle/rolling | medium | low | medium | NS birch companions, fallback | bright irregular canopy + камовые hills + pale debris | planned | not run |
+| `minecraft:dark_forest` | temperate wet | L–M | gentle/rolling | high | low | high hollows | NS shade plants, fallback | closed canopy + storm gaps + moss/deadwood | planned | not run |
+| `minecraft:old_growth_birch_forest` | cool temperate wet | M–H | rolling/steep | medium | low/cliff | medium | NS old trees, fallback | tall silhouettes + ravines + boulder fields | planned | not run |
+| `minecraft:old_growth_pine_taiga` | boreal continental | M–H | rolling/steep | high gravel | low/cliff | medium | NS conifers, fallback | giant pine clusters + podzol openings + moraine | planned | not run |
+| `minecraft:old_growth_spruce_taiga` | boreal humid | M–H | rolling/steep | high mountain | low/cliff | high valleys | NS redwood/spruce, fallback | tiered giant spruce + moss ravines + talus | planned | not run |
+| `minecraft:taiga` | boreal | L–H | gentle/rolling | high gravel | low/medium | medium | NS conifers/shrubs, fallback | longitudinal groves + berry floor + gravel streams | planned | not run |
+| `minecraft:snowy_taiga` | cold boreal | L–H | rolling | high/frozen | medium polar | frozen/medium | NS cold conifers, fallback | snow shelter clusters + frozen lakes + podzol gaps | planned | not run |
+| `minecraft:savanna` | warm seasonal dry | L–M | gentle/rolling | medium/seasonal | medium | low; river high | NS dry woodland, fallback | drainage acacia groves + grass mosaics + dry rock | planned | not run |
+| `minecraft:savanna_plateau` | warm arid highland | M–H | rolling/steep | low/seasonal | low/cliff | low | NS dry shrubs, fallback | plateau steps + wind acacia + escarpment rock | planned | not run |
+| `minecraft:windswept_hills` | cool windy | M–H | steep/cliff | high headwater | cliff | medium valleys | NS heath, fallback | bare ridges + sheltered tree pockets + saddles | planned | not run |
+| `minecraft:windswept_gravelly_hills` | cool windy dry | M–H | steep/cliff | medium gravel | cliff | low | NS scree plants, fallback | gravel crest + talus fan + sparse twisted trees | planned | not run |
+| `minecraft:windswept_forest` | cool windy humid | M–H | rolling/steep | high headwater | cliff | medium | NS wind trees, fallback | asymmetric canopy + open crest + exposed rock gate | planned | not run |
+| `minecraft:windswept_savanna` | warm windy arid | M–H | steep/cliff | seasonal canyon | cliff | low | NS dry/volcanic pioneers, fallback | broken plateau + volcanic variant + twisted acacia | planned | not run |
+| `minecraft:jungle` | tropical perhumid | L–H | rolling/steep | very high/karst | high humid cliff | high | NS tropical plants/trees, fallback | canopy tiers + limestone towers + river gaps | planned | not run |
+| `minecraft:sparse_jungle` | tropical seasonal | L–M | gentle/rolling | medium/high | medium | medium | NS tropical shrubs, fallback | canopy edge + open terraces + limestone exposure | planned | not run |
+| `minecraft:bamboo_jungle` | tropical wet basin | L–M | flat/rolling | very high | medium estuary | high/saturated pockets | NS bamboo companions, fallback | bamboo mosaics + sinkholes + emergent trees | planned | not run |
+| `minecraft:badlands` | hot arid continental | L–H | rolling/cliff | seasonal canyon | cliff | very low | NS arid plants, fallback | painted benches + canyon sediment + sparse drainage scrub | planned | not run |
+| `minecraft:eroded_badlands` | hot hyper-arid | M–H | steep/cliff | low/flash | cliff | very low | NS sparse arid plants, fallback | hoodoo rhythm + bare slots + talus aprons | planned | not run |
+| `minecraft:wooded_badlands` | warm semi-arid upland | M–H | rolling/steep | medium canyon | cliff | low/medium springs | NS plateau trees, fallback | wooded tops + painted walls + spring groves | planned | not run |
+| `minecraft:meadow` | cool humid highland | M–H | gentle/rolling | high headwater | low/cliff | medium | NS alpine flowers, fallback | flower mosaics + treeline transition + alpine tarn | planned | not run |
+| `minecraft:cherry_grove` | mild humid highland | M–H | gentle/rolling | medium/high | low/cliff | medium | NS understory, fallback | clustered cherry terraces + petal gaps + rock rim | planned | not run |
+| `minecraft:grove` | subalpine humid | H–A | rolling/steep | high snowmelt | polar cliff | frozen/medium | NS alpine conifers, fallback | spruce bowls + avalanche gaps + moraine | planned | not run |
+| `minecraft:snowy_slopes` | alpine cold | H–A | steep/cliff | high snowmelt | polar cliff | frozen | NS alpine pioneers, fallback | continuous snow belts + gullies + sparse lower krummholz | planned | not run |
+| `minecraft:frozen_peaks` | glacial alpine | A | steep/cliff | glacial headwater | polar cliff | frozen | none required | glacier mass + moraine + exposed crystalline rock | planned | not run |
+| `minecraft:jagged_peaks` | alpine continental | H–A | cliff | high headwater | cliff | low/frozen pockets | none required | aretes + couloirs + height-thinned cover | planned | not run |
+| `minecraft:stony_peaks` | warm alpine | H–A | steep/cliff | karst/volcanic headwater | cliff | low; spring pockets | NS alpine plants, fallback | calcite/volcanic variants + bare shelves + springs | planned | not run |
+| `minecraft:river` | inherited watershed | L–H corridor | flat–steep by family | defining | mouth high | high in corridor only | NS riparian plants, fallback | channel order profile + point bars + narrow riparian grammar | partial: Stage 5 physical pass | Stage 5 synthetic passed; Stage 6 not run |
+| `minecraft:frozen_river` | cold inherited | L–H corridor | flat–steep by family | defining/frozen | polar mouth high | frozen/high | NS cold riparian, fallback | ice/bar zones + snowmelt banks + shelter strip | partial: Stage 5 physical pass | Stage 5 synthetic passed; Stage 6 not run |
+| `minecraft:beach` | inherited temperate/warm | sea level | flat/gentle | mouth high | defining | saline/medium backshore | NS coastal grass, fallback | swash/berm/dune + driftwood + inland ecotone | planned | not run |
+| `minecraft:snowy_beach` | polar coast | sea level | flat/gentle | frozen mouth high | defining | frozen/saline | NS cold coast plants, fallback | gravel-snow berm + pressure ice + sparse cover | planned | not run |
+| `minecraft:stony_shore` | inherited rocky coast | sea level–M | steep/cliff | waterfall/mouth | defining | wet cracks | NS cliff plants, fallback | wave platform + cobble fan + cliff-top transition | planned | not run |
+| `minecraft:warm_ocean` | tropical marine | S | shelf | river mouth | reef coast | saline | NS island vegetation, fallback | reef zonation + carbonate bed + atoll grammar | partial: atoll feature | not run |
+| `minecraft:lukewarm_ocean` | subtropical marine | S | shelf | river mouth | sandy/reef | saline | NS island vegetation, fallback | seagrass banks + patch reef + island vegetation | partial: atoll feature | not run |
+| `minecraft:deep_lukewarm_ocean` | subtropical deep marine | S deep | shelf/cliff | submarine mouth | shelf edge | saline | none required | deep terrace + canyon + sparse lit-bank flora | planned | not run |
+| `minecraft:ocean` | temperate marine | S | shelf | river mouth | mixed | saline | NS island vegetation, fallback | rocky banks + kelp mosaic + coherent islands | planned | not run |
+| `minecraft:deep_ocean` | temperate deep marine | S deep | gentle/cliff | submarine mouth | shelf edge | saline | none required | abyssal sediment + seamount + sparse flora | planned | not run |
+| `minecraft:cold_ocean` | cold marine | S | shelf | glacial mouth | gravel/polar | saline/cold | NS cold coast plants, fallback | drowned moraine + kelp belts + gravel banks | planned | not run |
+| `minecraft:deep_cold_ocean` | cold deep marine | S deep | trough/cliff | glacial mouth | shelf edge | saline/cold | none required | glacial trough + deep terrace + cold sparse flora | planned | not run |
+| `minecraft:frozen_ocean` | polar marine | S/sea ice | shelf | frozen mouth | ice defining | frozen/saline | none required | leads + pressure ridges + shoals | planned | not run |
+| `minecraft:deep_frozen_ocean` | polar deep marine | S deep/ice | trough/cliff | frozen mouth | ice shelf | frozen/saline | none required | tabular ice + submarine trough + abyss | planned | not run |
+| `minecraft:mushroom_fields` | mild oceanic mycelial | L–H island | rolling/steep coast | medium | mycelial defining | medium/high pockets | NS fungi optional, fallback | three mushroom silhouettes + mycelial rock + luminous wet pockets | partial: mycelial grove | not run |
+| `minecraft:dripstone_caves` | underground arid/karst | U | chamber/cliff | underground high | none | low–high by channel | NS cave plants optional, fallback | carbonate layers + drip gradients + underground river | partial: decorative overlays | not run |
+| `minecraft:lush_caves` | underground humid | U | chamber/terrace | underground high | none | high/aquifer | NS cave flora optional, fallback | moss terraces + root shafts + lake-light gradient | partial: decorative overlays | not run |
+| `minecraft:deep_dark` | deep underground | U deep | rift/cliff | very low/controlled | none | low; rare black lake | none required | sculk inward gradient + asymmetric rift + bare threshold | partial: decorative overlays | not run |
+
+## 9. Implementation status
 
 На коммите, предшествующем этой матрице:
 
-- достижимость biome source: `53/53`;
+- статическое присутствие в vanilla Overworld biome source: `53/53`;
+- runtime-достижимость на трёх seed: не проверена;
 - полностью реализованных строк матрицы: `0/53`;
 - строк с отдельным явным surface biome condition: `28/53`;
 - строк с отдельным полным vegetation profile: `0/53`;
@@ -374,7 +451,7 @@ Geological province должен выбираться раньше биома. �
 
 Эти значения должны обновляться только после тестов и визуального отчёта.
 
-## 9. Acceptance для отдельной строки
+## 10. Acceptance для отдельной строки
 
 Строка переводится из `SPEC` в `IMPLEMENTED`, только если:
 
