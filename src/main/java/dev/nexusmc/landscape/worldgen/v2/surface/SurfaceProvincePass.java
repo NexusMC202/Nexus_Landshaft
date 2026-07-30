@@ -81,7 +81,8 @@ public final class SurfaceProvincePass {
 
                 NexusV2FieldSampler.SurfaceInputs input =
                     inputs[localZ + 1][localX + 1];
-                RegionalFieldMath.Sample regional = regional(input);
+                RegionalFieldMath.Sample regional =
+                    SurfaceContextFactory.regional(input);
                 HydrologyMath.Sample river =
                     hydrology.sample(worldX, worldZ);
                 HydrologyMath.BasinSample basin =
@@ -91,73 +92,17 @@ public final class SurfaceProvincePass {
                     localX + 1,
                     localZ + 1
                 );
-                double coast = channel(input, RegionalFieldMath.Channel.COAST_WEIGHT);
-                double volcanic = Math.max(
-                    regional.provinceWeight(RegionalFieldMath.Province.VOLCANIC_BELT),
-                    channel(input, RegionalFieldMath.Channel.VOLCANIC_MOUNTAINS)
-                );
-                double glacier = channel(
-                    input,
-                    RegionalFieldMath.Channel.GLACIER_MASS
-                );
-                double canyon = channel(
-                    input,
-                    RegionalFieldMath.Channel.CANYON_INCISION
-                );
-                double karst = regional.provinceWeight(
-                    RegionalFieldMath.Province.KARST_BELT
-                );
-                double mycelial = regional.provinceWeight(
-                    RegionalFieldMath.Province.MYCELIAL_CRATON
-                );
-                double archipelago = clamp01(
-                    regional.provinceWeight(
-                        RegionalFieldMath.Province.OCEANIC_CRUST
-                    ) * (0.35 + coast * 0.65)
-                );
-                double groundwater = clamp01(
-                    (input.humidity() + 1.0) * 0.34
-                        + regional.provinceWeight(
-                            RegionalFieldMath.Province.WETLAND_BASIN
-                        ) * 0.48
-                        + basin.mask() * 0.25
-                );
-                double alpine = clamp01(
-                    (surfaceY - 128.0) / 96.0
-                        + glacier * 0.55
-                );
-                SurfaceContext context = new SurfaceContext(
+                SurfaceContext context = SurfaceContextFactory.create(
                     seed,
                     worldX,
                     worldZ,
                     surfaceY,
                     biomeKey,
-                    regional.dominantProvince().serializedName(),
-                    input.temperature(),
-                    input.humidity(),
-                    input.continentalness(),
-                    input.erosion(),
-                    input.weirdness(),
-                    surfaceY,
-                    clamp01((surfaceY + 64.0) / 384.0),
-                    slope,
-                    river.distance(),
-                    river.mask(),
-                    clamp01(river.mask() * 0.72
-                        + smoothstep(42.0, 4.0, river.distance()) * 0.28),
-                    basin.mask(),
-                    coast,
-                    192.0 * (1.0 - coast),
-                    groundwater,
-                    volcanic,
-                    glacier,
-                    alpine,
-                    canyon,
-                    karst,
-                    mycelial,
-                    archipelago,
-                    SurfaceNoise.value(seed, worldX, worldZ, 48, 0x51FACEL),
-                    SurfaceNoise.value(seed, worldX, worldZ, 11, 0x6D47E21L)
+                    input,
+                    regional,
+                    river,
+                    basin,
+                    slope
                 );
                 SurfaceProfile profile = SurfaceProfileCatalog.find(biomeKey)
                     .orElseGet(() -> fallback(
@@ -312,38 +257,6 @@ public final class SurfaceProvincePass {
         );
     }
 
-    private static RegionalFieldMath.Sample regional(
-        NexusV2FieldSampler.SurfaceInputs input
-    ) {
-        return RegionalFieldMath.sample(
-            input.continentalness(),
-            input.temperature(),
-            input.humidity(),
-            input.macro(),
-            input.detail(),
-            input.ridge(),
-            input.volcanic(),
-            input.composition()
-        );
-    }
-
-    private static double channel(
-        NexusV2FieldSampler.SurfaceInputs input,
-        RegionalFieldMath.Channel channel
-    ) {
-        return RegionalFieldMath.compute(
-            channel,
-            input.continentalness(),
-            input.temperature(),
-            input.humidity(),
-            input.macro(),
-            input.detail(),
-            input.ridge(),
-            input.volcanic(),
-            input.composition()
-        );
-    }
-
     private static AnalyticalTerrainMath.Sample analytical(
         NexusV2FieldSampler.SurfaceInputs input
     ) {
@@ -363,14 +276,6 @@ public final class SurfaceProvincePass {
         double dx = heights[z][x + 1] - heights[z][x - 1];
         double dz = heights[z + 1][x] - heights[z - 1][x];
         return clamp01(Math.sqrt(dx * dx + dz * dz) / 16.0);
-    }
-
-    private static double smoothstep(double edge0, double edge1, double value) {
-        if (edge1 < edge0) {
-            return 1.0 - smoothstep(edge1, edge0, value);
-        }
-        double t = clamp01((value - edge0) / (edge1 - edge0));
-        return t * t * (3.0 - 2.0 * t);
     }
 
     private static double clamp01(double value) {

@@ -13,6 +13,8 @@ import net.minecraft.server.level.WorldGenRegion;
 import net.minecraft.world.level.StructureManager;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.levelgen.RandomState;
+import net.minecraft.world.level.WorldGenLevel;
+import dev.nexusmc.landscape.worldgen.v2.vegetation.VegetationProvincePass;
 
 /**
  * Stable V2 generator codec. Stage 4 deliberately delegates every generation
@@ -50,5 +52,21 @@ public final class NexusV2ChunkGenerator extends NoiseBasedChunkGenerator {
         super.buildSurface(level, structureManager, random, chunk);
         SurfaceProvincePass.apply(level, chunk, random);
         RiverWaterPass.apply(chunk, random);
+    }
+
+    @Override
+    public void applyBiomeDecoration(
+        WorldGenLevel level,
+        ChunkAccess chunk,
+        StructureManager structureManager
+    ) {
+        super.applyBiomeDecoration(level, chunk, structureManager);
+        if (level instanceof WorldGenRegion region) {
+            VegetationProvincePass.apply(
+                level,
+                chunk,
+                region.getLevel().getChunkSource().randomState()
+            );
+        }
     }
 }

@@ -4,6 +4,21 @@
 Этап: 6 — Surface and Vegetation Provinces
 Статус этапа: **в работе, не завершён**.
 
+## Status table
+
+| Задача | Статус | Файлы | Тесты | Runtime status | Ограничения |
+|---|---|---|---|---|---|
+| Audit 53 biomes | DONE | `STAGE_6_AUDIT.md` | row count 53 | n/a | runtime coverage pending |
+| Surface profiles | DONE | `surface/SurfaceProfile*` | Stage 6 surface PASS | connected to `buildSurface` | visual survey pending |
+| Smooth surface blending | DONE | `SurfaceNoise`, resolver | seam/seed/order PASS | connected | palette telemetry pending |
+| Unknown/optional fallback | PARTIAL | surface/vegetation catalogs | no-mod fallback PASS | generic keys supported | Nature’s Spirit runtime not installed/tested |
+| Vegetation profiles | DONE | `vegetation/VegetationProfile*` | vegetation 53/53 PASS | connected after decoration | final vanilla+Nexus density not measured |
+| River/slope/treeline exclusions | DONE | `VegetationResolver` | exclusion PASS | connected for Nexus accents | vanilla features remain |
+| Cave accents | PARTIAL | `VegetationProvincePass` | terrestrial exclusion PASS | limited runtime probes | Stage 7 geometry intentionally untouched |
+| Three-seed survey | PARTIAL | existing `WorldgenSurvey` | fresh seed 240802 reached Done | first report incomplete | hook/run duration issue |
+| F3 screenshots | BLOCKED | — | — | dedicated server has no UI | requires runClient/user capture |
+| Performance acceptance | PARTIAL | architecture docs | hot-path design reviewed | spawn completed | timings/counters pending |
+
 ## 1. Исходное состояние
 
 Перед изменениями сохранён Stage 5 regression contract:
