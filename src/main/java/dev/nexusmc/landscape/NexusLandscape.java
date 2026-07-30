@@ -1,6 +1,7 @@
 package dev.nexusmc.landscape;
 
 import dev.nexusmc.landscape.command.RouteAuditCommand;
+import dev.nexusmc.landscape.command.Stage6Command;
 import dev.nexusmc.landscape.diagnostics.WorldgenSurvey;
 import dev.nexusmc.landscape.worldgen.CaveSanctumFeature;
 import dev.nexusmc.landscape.worldgen.CoralAtollFeature;
@@ -69,5 +70,6 @@ public final class NexusLandscape {
 
     private void registerCommands(RegisterCommandsEvent event) {
         RouteAuditCommand.register(event.getDispatcher());
+        Stage6Command.register(event.getDispatcher());
     }
 }

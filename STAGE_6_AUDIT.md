@@ -16,9 +16,11 @@ NeoForge: `21.1.235`
 | River/lake final authority | IMPLEMENTED | `RiverWaterPass` вызывается после surface pass |
 | Smooth coordinate blending | IMPLEMENTED | `SurfaceNoise`, smooth influence masks |
 | Unknown/modded biome fallback | PARTIALLY IMPLEMENTED | climate-aware fallback; runtime Nature’s Spirit instance ещё не проверен |
-| Vegetation profiles | DATA ONLY | целевые записи есть в Matrix C, Java grammar отсутствует |
-| Cave biome material pass | NOT CONNECTED TO RUNTIME | cave profiles есть в catalog, surface pass не обрабатывает underground volumes |
-| Runtime survey | PARTIALLY IMPLEMENTED | fresh seed 240802 reached server Done; report hook не завершился |
+| Vegetation profiles | IMPLEMENTED | 53/53 immutable profiles; `VegetationProvincePass` вызывается после biome decoration |
+| Cave biome material pass | PARTIALLY IMPLEMENTED | terrestrial surface исключает 3D cave biome leakage; ограниченные cave accents подключены, но geometry Stage 7 не начиналась |
+| Runtime survey | PARTIALLY IMPLEMENTED | три fresh seed дошли до `Done`; counters и targeted reports получены, но полное scene coverage отсутствует |
+| Runtime diagnostics commands | IMPLEMENTED | read-only `biome_audit`; CSV `survey` отключён по умолчанию и dev-gated |
+| Performance/cache bounds | PARTIALLY IMPLEMENTED | hydrology caches ограничены и протестированы; seed 918273645 занял 105.720 s |
 | F3 screenshots | BLOCKED BY RUNTIME UI | dedicated-server smoke не создаёт клиентские screenshots |
 
 Ни одна строка выше не означает завершение Stage 6: vegetation и cave runtime

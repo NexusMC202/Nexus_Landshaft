@@ -2,155 +2,106 @@
 
 Последнее обновление: 2026-07-31
 Этап: 6 — Surface and Vegetation Provinces
-Статус этапа: **в работе, не завершён**.
+Статус этапа: **PARTIAL — runtime подключён, визуальная приёмка не выполнена**.
 
 ## Status table
 
-| Задача | Статус | Файлы | Тесты | Runtime status | Ограничения |
+| Задача | Статус | Файлы | Тесты | Runtime status | Известные ограничения |
 |---|---|---|---|---|---|
-| Audit 53 biomes | DONE | `STAGE_6_AUDIT.md` | row count 53 | n/a | runtime coverage pending |
-| Surface profiles | DONE | `surface/SurfaceProfile*` | Stage 6 surface PASS | connected to `buildSurface` | visual survey pending |
-| Smooth surface blending | DONE | `SurfaceNoise`, resolver | seam/seed/order PASS | connected | palette telemetry pending |
-| Unknown/optional fallback | PARTIAL | surface/vegetation catalogs | no-mod fallback PASS | generic keys supported | Nature’s Spirit runtime not installed/tested |
-| Vegetation profiles | DONE | `vegetation/VegetationProfile*` | vegetation 53/53 PASS | connected after decoration | final vanilla+Nexus density not measured |
-| River/slope/treeline exclusions | DONE | `VegetationResolver` | exclusion PASS | connected for Nexus accents | vanilla features remain |
-| Cave accents | PARTIAL | `VegetationProvincePass` | terrestrial exclusion PASS | limited runtime probes | Stage 7 geometry intentionally untouched |
-| Three-seed survey | PARTIAL | existing `WorldgenSurvey` | fresh seed 240802 reached Done | first report incomplete | hook/run duration issue |
-| F3 screenshots | BLOCKED | — | — | dedicated server has no UI | requires runClient/user capture |
-| Performance acceptance | PARTIAL | architecture docs | hot-path design reviewed | spawn completed | timings/counters pending |
+| Audit 53 biomes | DONE | `STAGE_6_AUDIT.md`, `BIOME_MATRIX.md` | 53/53 catalog coverage | все профили доступны resolver | не все 53 встречены в runtime survey |
+| Runtime surface resolver | DONE | `surface/*`, `NexusV2ChunkGenerator` | determinism, priority, seams, threads PASS | физически меняет новые chunks до `RiverWaterPass` | визуально не принят |
+| Smooth material transitions | DONE | `SurfaceNoise`, `SurfaceProfileResolver` | boundary/seed/order PASS | coordinate noise, masks и dither работают | atlas не заменяет игровой осмотр |
+| Unknown/modded biome fallback | PARTIAL | surface/vegetation catalogs | unknown/no-mod PASS | climate-aware fallback логируется один раз | Nature’s Spirit не установлен в runtime |
+| Vegetation provinces | DONE | `vegetation/*`, `NexusV2ChunkGenerator` | 53/53, density, exclusions PASS | выполняются после vanilla decoration | итоговая смесь vanilla+Nexus визуально не принята |
+| River/slope/treeline exclusions | DONE | `VegetationResolver` | river/slope/height PASS | Nexus trees подавляются масками | vanilla placed features остаются отдельной системой |
+| Cave vegetation accents | PARTIAL | `VegetationProvincePass` | наземная растительность под землёй запрещена | код подключён, fresh runs без ненулевых cave accents | Stage 7 cave geometry не начиналась |
+| Runtime telemetry | DONE | `SurfaceProvincePass`, `VegetationProvincePass`, `WorldgenSurvey` | snapshot/reset + cache tests PASS | counters привязаны к `RandomState` и сбрасываются на survey | telemetry покрывает Nexus pass, не vanilla decoration |
+| Three fresh seeds | PARTIAL | `STAGE_6_RUNTIME_SURVEY.md` | server startup/survey PASS | `240802`, `-41027`, `918273645` созданы заново | полный набор из 10 сцен на каждом seed не покрыт |
+| Diagnostic commands | DONE | `Stage6Command` | compile/check PASS | read-only `biome_audit`; CSV export dev-gated | команды требуют запущенный мир с правами |
+| Performance acceptance | PARTIAL | bounded cache + architecture docs | cache concurrency/capacity PASS | 47.8–105.7 s до `Done` в измеренных fresh worlds | большой seed показал неприемлемые 105.7 s; профилирование JVM не выполнено |
+| Shader-free F3 screenshots | BLOCKED | — | — | dedicated server не имеет UI | нужен `runClient` и ручной захват |
 
-## 1. Исходное состояние
+## Implemented
 
-Перед изменениями сохранён Stage 5 regression contract:
+- `SurfaceProvincePass` вызывается после vanilla/Tectonic surface rules и до
+  `RiverWaterPass`. Поэтому Stage 5 остаётся последним владельцем русел, озёр и
+  overflow.
+- Immutable `SurfaceContext` объединяет seed, абсолютные координаты, biome,
+  climate router, province, height/slope, river/lake/coast и специальные
+  regional influences.
+- 53 surface profiles и 53 vegetation profiles реально участвуют в выборе
+  материалов и растительности новых chunks.
+- `VegetationProvincePass` вызывается после vanilla biome decoration и
+  добавляет детерминированные ground accents, камни, деревья и ограниченные
+  cave accents.
+- Hydrology caches имеют строгую вместимость; survey counters можно явно
+  snapshot/reset для конкретного generation run.
+- Добавлены `/nexuslandscape biome_audit <radius>` и отключённый по умолчанию
+  `/nexuslandscape survey <radius>`. CSV export включается только переменной
+  `NEXUS_LANDSCAPE_DEV_COMMANDS=1`.
 
-- sink-star: 0;
-- rectangular junctions: 0;
-- trunk continuity: 100%;
-- downhill centerline: около 99.99%;
-- river mask: около 8.25%;
-- clean build и GitHub Actions проходили.
+## Synthetic verified
 
-Фактическое исходное состояние surface/vegetation описано в
-`STAGE_6_AUDIT.md`. Все biome holders присутствуют в vanilla Overworld
-multi-noise source, но runtime coverage на трёх seed ещё не доказан.
+`check` включает Stage 4/5 regression и Stage 6 surface/vegetation self-tests:
 
-## 2. Implemented
+- 53/53 профиля, отсутствие `null`;
+- unknown biome и запуск без Nature’s Spirit;
+- seed determinism, different-seed variation, reverse query order и parallel;
+- x/z 15/16 seam probes;
+- приоритет channel/lake/coast/volcanic/alpine/slope/base;
+- распределение материалов и допустимая vegetation density;
+- запрет terrestrial vegetation в cave context;
+- снижение деревьев на склонах, выше tree line и в центре рек;
+- bounded-cache capacity, clear и concurrency.
 
-### Audit и design contract
+## Runtime verified
 
-- добавлен `STAGE_6_AUDIT.md`;
-- проверены noise settings, generator chain, biome tags, biome modifiers и
-  rarity всех Nexus placed features;
-- аудит содержит 53/53 Overworld biome IDs;
-- `BIOME_MATRIX.md` расширен обязательными climate, elevation, slope,
-  affinity, wetness, optional integration, distinction, implementation и test
-  status полями;
-- в Matrix D автоматически подтверждены 53 уникальные строки.
+Три свежих мира NeoForge 1.21.1 успешно дошли до `Done`:
 
-### Surface profile architecture
+- `240802`: 47.820 s, targeted open-lake survey;
+- `-41027`: 51.704 s, targeted survey;
+- `918273645`: 105.720 s, targeted highland survey.
 
-Добавлены immutable, не удерживающие мир объекты:
-
-- `SurfaceProfile`;
-- `SurfaceContext`;
-- `SurfaceSelection`;
-- `SurfaceProfileResolver`;
-- `SurfaceProfileCatalog`.
-
-Catalog содержит 53/53 профиля. Каждый профиль имеет:
-
-- уникальный biome/profile ID;
-- macro climate и terrain family;
-- elevation/slope band;
-- top, soil, transition, exposed rock, wet, sediment, coast и alpine palettes;
-- вертикальную глубину soil;
-- минимум три visual traits.
-
-Resolver использует единый порядок:
-
-`channel → lake shore → wet bank → coast → volcanic → alpine → exposed slope → base`.
-
-Он является чистой функцией и не читает level, chunk или соседние chunks.
-
-## 3. Synthetic verified
-
-Новый Gradle task `stage6SurfaceTest`, подключённый к `check`, проверяет:
-
-- точное множество 53 vanilla Overworld biome IDs;
-- наличие structured surface profile для каждого биома;
-- уникальность profile IDs;
-- отсутствие `vanilla` sentinel вместо профиля;
-- минимум три visual traits;
-- заполненность всех вертикальных palettes;
-- приоритет river/lake/coast/volcanic/alpine/slope зон;
-- независимость от порядка запросов;
-- многопоточное чтение immutable catalog/resolver.
-
-Последний результат:
+На финальном lake run seed `240802`:
 
 ```text
-SurfaceProfileSelfTest: PASS profiles=53
-RegionalFieldMathSelfTest: PASS
-BUILD SUCCESSFUL
+surface.columns=43264
+surface.blocks_changed=208689
+surface.zone.lake_shore=34949
+surface.zone.wet_bank=867
+vegetation.chunks=121
+vegetation.ground_blocks=1317
+vegetation.rock_blocks=9
+vegetation.tree_attempts=18
 ```
 
-Stage 5 synthetic tests в том же `check`:
+`neighbour reads`, cascading/far-chunk warnings и worldgen crash в логе не
+обнаружены. Подробности и координаты находятся в
+`STAGE_6_RUNTIME_SURVEY.md`.
 
-```text
-hydrology seams=6110 downhillChecks=4211 convergences=156 terminals=2 lakes=2
-hydrology physicalBasins openLakes=1 overflowChannels=34
-active river network routing=4211 active=2779 share=0.660
-terminalMax=3 sinuosity=1.0609 junctionP90=17.03 downhill=PASS
-hydrology request-order/thread samples=664
-basin seams samples=656 targeted=6 continuity=17 cold/warm/reverse/thread=PASS
-```
+## Visually accepted
 
-## 4. Runtime verified
+Нет. Игровые shader-free F3 screenshots не созданы: доступный dedicated-server
+workflow не имеет клиентского окна. PNG atlas являются только диагностикой.
 
-Пока не выполнено для Stage 6:
+## Failed / open
 
-- profile catalog ещё не подключён к физической записи surface blocks;
-- vegetation grammar ещё не реализована;
-- `/nexuslandscape biome_audit <radius>` ещё не добавлена;
-- `/nexuslandscape survey <radius>` ещё не добавлена;
-- coverage/surface/vegetation survey на трёх seed не выполнен;
-- decoration mean/p95/max не измерены.
+- В targeted lake crop биомы `plains`, `river`, `forest` найдены, но canonical
+  `river.samples=0`; согласование hydrology survey с реальным river biome
+  требует отдельной проверки Stage 5/6.
+- Cave accents остались нулевыми в измеренных runtime regions.
+- Время создания spawn area на seed `918273645` — 105.720 s; performance
+  acceptance не пройдена.
+- Общий arbitration для старых Nexus landmark features не входит в эту
+  итерацию; Stage 7 не начинался.
+- Все 53 строки BIOME_MATRIX синтетически подключены, но ни одна не переводится
+  в visually accepted без трёх игровых наблюдений и screenshots.
 
-## 5. Visually accepted
+## Commits
 
-Нет. Shader-free F3 screenshots этапа 6 ещё не сняты. Автоматические atlas
-maps не будут выдаваться за игровые screenshots.
+- `95e20bc` — surface profile architecture;
+- `3774bc1` — runtime surface profiles;
+- `edff130` — runtime vegetation grammar;
+- `92bf3d8` — bounded caches and runtime telemetry.
 
-## 6. Failed / blockers
-
-- Performance contract пока нарушен двумя неограниченными maps в
-  `NexusV2HydrologySampler`; исправление обязательно до performance acceptance.
-- Nature’s Spirit optional resolver отсутствует.
-- Nexus feature overlays не имеют общего arbitration/exclusion field.
-- Все 53 biome vegetation profiles пока отсутствуют.
-- Реальные surface identities пока не применяются к chunks.
-
-## 7. Следующий последовательный шаг
-
-1. Реализовать immutable vegetation profiles и grammar.
-2. Подключить surface context к V2 runtime без чтения соседних chunks.
-3. Сохранить приоритет физического `RiverWaterPass` и lake/overflow.
-4. После biome-family implementation повторить Stage 5 regressions.
-
-## 8. Изменённые файлы текущей итерации
-
-- `STAGE_6_AUDIT.md`;
-- `BIOME_MATRIX.md`;
-- `STAGE_6_PROGRESS.md`;
-- `build.gradle`;
-- `src/main/java/dev/nexusmc/landscape/worldgen/v2/surface/SurfaceProfile.java`;
-- `src/main/java/dev/nexusmc/landscape/worldgen/v2/surface/SurfaceContext.java`;
-- `src/main/java/dev/nexusmc/landscape/worldgen/v2/surface/SurfaceSelection.java`;
-- `src/main/java/dev/nexusmc/landscape/worldgen/v2/surface/SurfaceProfileResolver.java`;
-- `src/main/java/dev/nexusmc/landscape/worldgen/v2/surface/SurfaceProfileCatalog.java`;
-- `src/test/java/dev/nexusmc/landscape/worldgen/v2/surface/SurfaceProfileSelfTest.java`.
-
-## 9. Commit
-
-Итоговый SHA этапа 6: отсутствует — этап не завершён.
-SHA текущей итерации: будет записан после commit.
+Финальный SHA команды/документации будет добавлен после regression run.

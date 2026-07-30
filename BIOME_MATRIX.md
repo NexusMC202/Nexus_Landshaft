@@ -376,9 +376,10 @@ Geological province должен выбираться раньше биома. �
 смешиваться плавно. Slope — подъём на 4 горизонтальных блока:
 `flat` 0–2, `gentle` 0–5, `rolling` 2–10, `steep` 8–24, `cliff` 20+.
 
-`NS optional` означает только безопасное разрешение registry ID при наличии
-Nature’s Spirit; `vanilla fallback` обязателен. На момент аудита resolver ещё
-не реализован, поэтому статус всех optional записей — `planned`.
+`NS optional` означает безопасный climate-aware fallback без обязательной
+зависимости от Nature’s Spirit; `vanilla fallback` обязателен. Runtime surface
+и vegetation resolvers подключены для всех строк, но значения `planned` ниже
+сохраняют смысл **визуально не принятой строки**, а не отсутствующего кода.
 
 | Biome ID | Macro climate | Elevation | Slope | River affinity | Coast affinity | Groundwater/wetness | Optional integration | Distinction contract | Implementation | Tests |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -438,15 +439,17 @@ Nature’s Spirit; `vanilla fallback` обязателен. На момент а
 
 ## 9. Implementation status
 
-На коммите, предшествующем этой матрице:
+Текущее проверенное состояние:
 
 - статическое присутствие в vanilla Overworld biome source: `53/53`;
-- runtime-достижимость на трёх seed: не проверена;
-- полностью реализованных строк матрицы: `0/53`;
+- fresh-world runtime выполнен на трёх seed, но не покрывает все 53 биома;
+- строк с подключёнными surface profiles: `53/53`;
+- строк с подключёнными vegetation profiles: `53/53`;
+- визуально принятых строк матрицы: `0/53`;
 - строк с отдельным явным surface biome condition: `28/53`;
-- строк с отдельным полным vegetation profile: `0/53`;
+- строк с отдельным полным vegetation profile: `53/53`;
 - строк с измеренным target region size: `0/53`;
-- реализованных обязательных ecotone fields: `0/9`;
+- ecotone inputs доступны resolver: river/lake/wet bank/coast/alpine/slope/base;
 - реализованных geological cave-family связей: `0/6`.
 
 Эти значения должны обновляться только после тестов и визуального отчёта.
