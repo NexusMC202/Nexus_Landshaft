@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Optional;
 
 /**
  * Complete Stage 6 surface contract for the 53 vanilla 1.21.1 Overworld
@@ -160,6 +161,38 @@ public final class SurfaceProfileCatalog {
             );
         }
         return profile;
+    }
+
+    public static Optional<SurfaceProfile> find(String biomeId) {
+        return Optional.ofNullable(PROFILES.get(biomeId));
+    }
+
+    /**
+     * Climate-aware safe profile for optional or unknown modded biomes.
+     */
+    public static SurfaceProfile fallback(
+        double temperature,
+        double humidity,
+        boolean underground
+    ) {
+        if (underground) {
+            return humidity > 0.25
+                ? require("minecraft:lush_caves")
+                : require("minecraft:dripstone_caves");
+        }
+        if (temperature < -0.35) {
+            return require("minecraft:snowy_plains");
+        }
+        if (temperature > 0.45 && humidity < -0.15) {
+            return require("minecraft:desert");
+        }
+        if (humidity > 0.55) {
+            return require("minecraft:swamp");
+        }
+        if (humidity > 0.18) {
+            return require("minecraft:forest");
+        }
+        return require("minecraft:plains");
     }
 
     public static Map<String, SurfaceProfile> profiles() {

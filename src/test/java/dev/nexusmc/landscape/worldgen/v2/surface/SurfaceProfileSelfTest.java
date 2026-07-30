@@ -36,9 +36,75 @@ public final class SurfaceProfileSelfTest {
         verifyCompleteCatalog();
         verifyEveryProfileIsStructured();
         verifyZonePrecedence();
+        verifyFallbackWithoutOptionalMods();
+        verifyTransitionNoise();
         verifyOrderIndependence();
         verifyThreadSafety();
         System.out.println("SurfaceProfileSelfTest: PASS profiles=53");
+    }
+
+    private static void verifyFallbackWithoutOptionalMods() {
+        require(
+            SurfaceProfileCatalog.find("natures_spirit:fir_forest").isEmpty(),
+            "optional biome unexpectedly became a hard catalog dependency"
+        );
+        require(
+            SurfaceProfileCatalog.fallback(-0.8, 0.1, false)
+                .biomeId().equals("minecraft:snowy_plains"),
+            "cold fallback is not climate-aware"
+        );
+        require(
+            SurfaceProfileCatalog.fallback(0.8, -0.7, false)
+                .biomeId().equals("minecraft:desert"),
+            "hot dry fallback is not climate-aware"
+        );
+        require(
+            SurfaceProfileCatalog.fallback(0.1, 0.8, false)
+                .biomeId().equals("minecraft:swamp"),
+            "wet fallback is not climate-aware"
+        );
+        require(
+            SurfaceProfileCatalog.fallback(0.1, 0.8, true)
+                .biomeId().equals("minecraft:lush_caves"),
+            "underground fallback applied a surface profile"
+        );
+    }
+
+    private static void verifyTransitionNoise() {
+        long seed = -918_273_645L;
+        double seamLeft = SurfaceNoise.value(seed, 15, -17, 48, 91L);
+        double seamRight = SurfaceNoise.value(seed, 16, -17, 48, 91L);
+        double seamTop = SurfaceNoise.value(seed, -17, 15, 48, 91L);
+        double seamBottom = SurfaceNoise.value(seed, -17, 16, 48, 91L);
+        require(
+            Math.abs(seamLeft - seamRight) < 0.08,
+            "artificial x chunk seam in transition noise"
+        );
+        require(
+            Math.abs(seamTop - seamBottom) < 0.08,
+            "artificial z chunk seam in transition noise"
+        );
+        require(
+            SurfaceNoise.value(seed, 8192, -4096, 48, 91L)
+                != SurfaceNoise.value(seed + 1, 8192, -4096, 48, 91L),
+            "different seeds produced identical transition noise"
+        );
+        Set<Long> paletteHashes = new HashSet<>();
+        for (int z = 0; z < 64; z += 4) {
+            for (int x = 0; x < 64; x += 4) {
+                paletteHashes.add(
+                    Math.floorMod(
+                        SurfaceNoise.hash(seed, x, z, 0x70A11L),
+                        7L
+                    )
+                );
+            }
+        }
+        require(
+            paletteHashes.size() >= 5,
+            "material distribution collapsed to one/few variants: "
+                + paletteHashes
+        );
     }
 
     private static void verifyCompleteCatalog() {
@@ -177,24 +243,36 @@ public final class SurfaceProfileSelfTest {
         double slope
     ) {
         return new SurfaceContext(
+            24_0802L,
+            128,
+            -256,
+            (int)Math.round(elevation),
+            "minecraft:plains",
+            "sedimentary_lowland",
             0.0,
             0.0,
             0.1,
             0.0,
             0.0,
             elevation,
+            Math.max(0.0, Math.min(1.0, (elevation + 64.0) / 384.0)),
             slope,
             riverMask > 0.0 ? 0.0 : 128.0,
             riverMask,
+            riverMask,
             lakeMask,
             coast,
+            128.0 * (1.0 - coast),
             0.2,
             volcanic,
             elevation > 170.0 ? 0.6 : 0.0,
+            elevation > 150.0 ? 0.7 : 0.0,
             0.1,
             0.1,
             0.0,
-            0.0
+            0.0,
+            0.37,
+            0.63
         );
     }
 

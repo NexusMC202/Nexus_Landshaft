@@ -8,6 +8,7 @@ import java.util.List;
 public record SurfaceSelection(
     String profileId,
     Zone zone,
+    double zoneWeight,
     List<String> topPalette,
     List<String> substratePalette,
     int depth
@@ -17,6 +18,13 @@ public record SurfaceSelection(
         substratePalette = List.copyOf(substratePalette);
         if (topPalette.isEmpty() || substratePalette.isEmpty()) {
             throw new IllegalArgumentException("selected palettes cannot be empty");
+        }
+        if (!Double.isFinite(zoneWeight)
+            || zoneWeight < 0.0
+            || zoneWeight > 1.0) {
+            throw new IllegalArgumentException(
+                "invalid zone weight: " + zoneWeight
+            );
         }
         if (depth < 1 || depth > 8) {
             throw new IllegalArgumentException("invalid selected depth: " + depth);

@@ -81,6 +81,29 @@ public final class NexusV2FieldSampler {
         );
     }
 
+    /**
+     * Exposes the exact warped climate/router inputs for chunk-local surface
+     * and vegetation passes. One call is intended per column; no world or
+     * mutable state is retained in the returned value.
+     */
+    public SurfaceInputs surfaceInputs(int blockX, int blockZ) {
+        Inputs inputs = inputs(blockX, blockZ);
+        DensityFunction.FunctionContext context =
+            new DensityFunction.SinglePointContext(blockX, 64, blockZ);
+        return new SurfaceInputs(
+            inputs.continentalness,
+            inputs.temperature,
+            inputs.humidity,
+            randomState.router().erosion().compute(context),
+            randomState.router().ridges().compute(context),
+            inputs.macro,
+            inputs.detail,
+            inputs.ridge,
+            inputs.volcanic,
+            inputs.composition
+        );
+    }
+
     private Inputs inputs(int blockX, int blockZ) {
         double warpSampleX = warpX.getValue(
             blockX * RegionalFieldMath.WARP_SCALE,
@@ -141,6 +164,20 @@ public final class NexusV2FieldSampler {
         double continentalness,
         double temperature,
         double humidity,
+        double macro,
+        double detail,
+        double ridge,
+        double volcanic,
+        double composition
+    ) {
+    }
+
+    public record SurfaceInputs(
+        double continentalness,
+        double temperature,
+        double humidity,
+        double erosion,
+        double weirdness,
         double macro,
         double detail,
         double ridge,

@@ -6,6 +6,24 @@ NeoForge: `21.1.235`
 Проверяемый preset: `nexus_landscape:nexus_v2`
 Статус: аудит исходников и generated resources; это не отчёт о завершении этапа 6.
 
+## 0. Runtime status после начала реализации
+
+| Категория | Статус | Подтверждение |
+|---|---|---|
+| Profile catalog 53/53 | IMPLEMENTED | `SurfaceProfileCatalog`, self-test |
+| Immutable context/resolver | IMPLEMENTED | `SurfaceContext`, `SurfaceProfileResolver` |
+| Physical surface blocks | IMPLEMENTED | `SurfaceProvincePass` вызывается из `buildSurface` |
+| River/lake final authority | IMPLEMENTED | `RiverWaterPass` вызывается после surface pass |
+| Smooth coordinate blending | IMPLEMENTED | `SurfaceNoise`, smooth influence masks |
+| Unknown/modded biome fallback | PARTIALLY IMPLEMENTED | climate-aware fallback; runtime Nature’s Spirit instance ещё не проверен |
+| Vegetation profiles | DATA ONLY | целевые записи есть в Matrix C, Java grammar отсутствует |
+| Cave biome material pass | NOT CONNECTED TO RUNTIME | cave profiles есть в catalog, surface pass не обрабатывает underground volumes |
+| Runtime survey | PARTIALLY IMPLEMENTED | fresh seed 240802 reached server Done; report hook не завершился |
+| F3 screenshots | BLOCKED BY RUNTIME UI | dedicated-server smoke не создаёт клиентские screenshots |
+
+Ни одна строка выше не означает завершение Stage 6: vegetation и cave runtime
+integration остаются обязательными.
+
 ## 1. Проверенная цепочка генерации
 
 `nexus_v2` использует:

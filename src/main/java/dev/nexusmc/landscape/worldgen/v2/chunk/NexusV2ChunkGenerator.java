@@ -8,6 +8,7 @@ import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import dev.nexusmc.landscape.worldgen.v2.hydrology.RiverWaterPass;
+import dev.nexusmc.landscape.worldgen.v2.surface.SurfaceProvincePass;
 import net.minecraft.server.level.WorldGenRegion;
 import net.minecraft.world.level.StructureManager;
 import net.minecraft.world.level.chunk.ChunkAccess;
@@ -47,6 +48,7 @@ public final class NexusV2ChunkGenerator extends NoiseBasedChunkGenerator {
         ChunkAccess chunk
     ) {
         super.buildSurface(level, structureManager, random, chunk);
+        SurfaceProvincePass.apply(level, chunk, random);
         RiverWaterPass.apply(chunk, random);
     }
 }
