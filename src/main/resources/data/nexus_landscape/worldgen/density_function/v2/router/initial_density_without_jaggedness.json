@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:add",
+  "argument1": {
+    "type": "minecraft:add",
+    "argument1": "nexus_landscape:tectonic/overworld/noise_router/initial_density_without_jaggedness",
+    "argument2": {
+      "type": "minecraft:mul",
+      "argument1": 0.38,
+      "argument2": "nexus_landscape:v2/continent/delta_from_legacy"
+    }
+  },
+  "argument2": {
+    "type": "minecraft:mul",
+    "argument1": 0.18,
+    "argument2": "nexus_landscape:v2/field/macro_uplift"
+  }
+}

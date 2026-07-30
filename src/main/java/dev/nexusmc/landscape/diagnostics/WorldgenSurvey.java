@@ -1,6 +1,8 @@
 package dev.nexusmc.landscape.diagnostics;
 
 import com.mojang.logging.LogUtils;
+import dev.nexusmc.landscape.worldgen.v2.field.NexusV2FieldSampler;
+import dev.nexusmc.landscape.worldgen.v2.field.RegionalFieldMath;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
@@ -36,6 +38,8 @@ public final class WorldgenSurvey {
     private static final int DEFAULT_RADIUS_CHUNKS = 24;
     private static final int SAMPLE_STEP = 4;
     private static final int IMAGE_SCALE = 3;
+    private static final int REGIONAL_ATLAS_SIZE = 384;
+    private static final int REGIONAL_ATLAS_STEP = 128;
     private static final List<String> OVERWORLD_BIOMES_1_21_1 = List.of(
         "plains", "sunflower_plains", "snowy_plains", "ice_spikes", "desert",
         "swamp", "mangrove_swamp", "forest", "flower_forest", "birch_forest",
@@ -76,8 +80,20 @@ public final class WorldgenSurvey {
             SurveyResult result = survey(server.overworld());
             Path output = Path.of("..", "build", "reports", "nexus-worldgen");
             Files.createDirectories(output);
-            writeMap(result, output.resolve("survey.png"));
+            writeMap(result.colors(), output.resolve("survey.png"));
+            writeMap(result.provinceColors(), output.resolve("province.png"));
+            writeMap(result.moodColors(), output.resolve("mood.png"));
+            writeMap(result.rhythmColors(), output.resolve("rhythm.png"));
+            writeMap(result.hierarchyColors(), output.resolve("hierarchy.png"));
+            writeMap(result.upliftColors(), output.resolve("macro-uplift.png"));
             Files.writeString(output.resolve("survey.txt"), result.report());
+            RegionalAtlasResult atlas = surveyRegionalAtlas(server.overworld());
+            writeMap(atlas.provinceColors(), output.resolve("province-atlas.png"));
+            writeMap(atlas.moodColors(), output.resolve("mood-atlas.png"));
+            writeMap(atlas.rhythmColors(), output.resolve("rhythm-atlas.png"));
+            writeMap(atlas.hierarchyColors(), output.resolve("hierarchy-atlas.png"));
+            writeMap(atlas.upliftColors(), output.resolve("macro-uplift-atlas.png"));
+            Files.writeString(output.resolve("regional-atlas.txt"), atlas.report());
             if ("1".equals(System.getenv("NEXUS_LANDSCAPE_VERIFY_BIOMES"))) {
                 Files.writeString(
                     output.resolve("biome-coverage.txt"),
@@ -100,10 +116,22 @@ public final class WorldgenSurvey {
         int centerZ = center.getZ();
         int[][] heights = new int[size][size];
         int[][] colors = new int[size][size];
+        int[][] provinceColors = new int[size][size];
+        int[][] moodColors = new int[size][size];
+        int[][] rhythmColors = new int[size][size];
+        int[][] hierarchyColors = new int[size][size];
+        int[][] upliftColors = new int[size][size];
         Map<String, Integer> biomeCounts = new HashMap<>();
+        Map<String, Integer> provinceCounts = new HashMap<>();
+        Map<String, Integer> moodCounts = new HashMap<>();
+        Map<String, Integer> rhythmCounts = new HashMap<>();
+        NexusV2FieldSampler regionalSampler =
+            new NexusV2FieldSampler(level.getChunkSource().randomState());
         long heightSum = 0;
         long heightSquareSum = 0;
         long slopeSum = 0;
+        double hierarchySum = 0.0;
+        double upliftSum = 0.0;
         int slopeSamples = 0;
         int waterSamples = 0;
         int minHeight = Integer.MAX_VALUE;
@@ -121,14 +149,36 @@ public final class WorldgenSurvey {
                     .registryOrThrow(Registries.BIOME)
                     .getKey(level.getBiome(surface).value());
                 String biomeName = biome == null ? "minecraft:unknown" : biome.toString();
+                RegionalFieldMath.Sample regional = regionalSampler.sample(worldX, worldZ);
+                RegionalFieldMath.Province province = regional.dominantProvince();
+                RegionalFieldMath.Mood mood = regional.dominantMood();
+                RegionalFieldMath.Rhythm rhythm = regional.rhythm();
 
                 heights[imageZ][imageX] = height;
                 colors[imageZ][imageX] = biomeColor(biomeName, height, water);
+                provinceColors[imageZ][imageX] = provinceColor(province);
+                moodColors[imageZ][imageX] = moodColor(mood);
+                rhythmColors[imageZ][imageX] = rhythmColor(rhythm);
+                hierarchyColors[imageZ][imageX] = scalarColor(
+                    regional.hierarchyStrength(),
+                    new Color(15, 19, 28),
+                    new Color(255, 210, 86)
+                );
+                upliftColors[imageZ][imageX] = scalarColor(
+                    Math.max(0.0, regional.macroUplift()),
+                    new Color(20, 38, 48),
+                    new Color(238, 238, 225)
+                );
                 biomeCounts.merge(biomeName, 1, Integer::sum);
+                provinceCounts.merge(province.serializedName(), 1, Integer::sum);
+                moodCounts.merge(mood.serializedName(), 1, Integer::sum);
+                rhythmCounts.merge(rhythm.serializedName(), 1, Integer::sum);
                 minHeight = Math.min(minHeight, height);
                 maxHeight = Math.max(maxHeight, height);
                 heightSum += height;
                 heightSquareSum += (long) height * height;
+                hierarchySum += regional.hierarchyStrength();
+                upliftSum += regional.macroUplift();
                 if (water) {
                     waterSamples++;
                 }
@@ -148,13 +198,92 @@ public final class WorldgenSurvey {
         double variance = heightSquareSum / (double) sampleCount - mean * mean;
         return new SurveyResult(
             colors,
+            provinceColors,
+            moodColors,
+            rhythmColors,
+            hierarchyColors,
+            upliftColors,
             biomeCounts,
+            provinceCounts,
+            moodCounts,
+            rhythmCounts,
             minHeight,
             maxHeight,
             mean,
             Math.sqrt(Math.max(0.0, variance)),
             slopeSum / (double) slopeSamples,
-            waterSamples * 100.0 / sampleCount
+            waterSamples * 100.0 / sampleCount,
+            hierarchySum / sampleCount,
+            upliftSum / sampleCount
+        );
+    }
+
+    private static RegionalAtlasResult surveyRegionalAtlas(ServerLevel level) {
+        int[][] provinceColors = new int[REGIONAL_ATLAS_SIZE][REGIONAL_ATLAS_SIZE];
+        int[][] moodColors = new int[REGIONAL_ATLAS_SIZE][REGIONAL_ATLAS_SIZE];
+        int[][] rhythmColors = new int[REGIONAL_ATLAS_SIZE][REGIONAL_ATLAS_SIZE];
+        int[][] hierarchyColors = new int[REGIONAL_ATLAS_SIZE][REGIONAL_ATLAS_SIZE];
+        int[][] upliftColors = new int[REGIONAL_ATLAS_SIZE][REGIONAL_ATLAS_SIZE];
+        Map<String, Integer> provinceCounts = new HashMap<>();
+        Map<String, Integer> moodCounts = new HashMap<>();
+        Map<String, Integer> rhythmCounts = new HashMap<>();
+        NexusV2FieldSampler sampler =
+            new NexusV2FieldSampler(level.getChunkSource().randomState());
+        int centerX = surveyCenter("NEXUS_LANDSCAPE_SURVEY_CENTER_X");
+        int centerZ = surveyCenter("NEXUS_LANDSCAPE_SURVEY_CENTER_Z");
+        int halfSpan = REGIONAL_ATLAS_SIZE * REGIONAL_ATLAS_STEP / 2;
+        double hierarchySum = 0.0;
+        double upliftSum = 0.0;
+        int dramatic = 0;
+
+        for (int imageZ = 0; imageZ < REGIONAL_ATLAS_SIZE; imageZ++) {
+            int worldZ = centerZ - halfSpan + imageZ * REGIONAL_ATLAS_STEP;
+            for (int imageX = 0; imageX < REGIONAL_ATLAS_SIZE; imageX++) {
+                int worldX = centerX - halfSpan + imageX * REGIONAL_ATLAS_STEP;
+                RegionalFieldMath.Sample sample = sampler.sample(worldX, worldZ);
+                RegionalFieldMath.Province province = sample.dominantProvince();
+                RegionalFieldMath.Mood mood = sample.dominantMood();
+                RegionalFieldMath.Rhythm rhythm = sample.rhythm();
+                provinceColors[imageZ][imageX] = provinceColor(province);
+                moodColors[imageZ][imageX] = moodColor(mood);
+                rhythmColors[imageZ][imageX] = rhythmColor(rhythm);
+                hierarchyColors[imageZ][imageX] = scalarColor(
+                    sample.hierarchyStrength(),
+                    new Color(15, 19, 28),
+                    new Color(255, 210, 86)
+                );
+                upliftColors[imageZ][imageX] = scalarColor(
+                    Math.max(0.0, sample.macroUplift()),
+                    new Color(20, 38, 48),
+                    new Color(238, 238, 225)
+                );
+                provinceCounts.merge(province.serializedName(), 1, Integer::sum);
+                moodCounts.merge(mood.serializedName(), 1, Integer::sum);
+                rhythmCounts.merge(rhythm.serializedName(), 1, Integer::sum);
+                hierarchySum += sample.hierarchyStrength();
+                upliftSum += sample.macroUplift();
+                if (rhythm == RegionalFieldMath.Rhythm.DRAMATIC) {
+                    dramatic++;
+                }
+            }
+        }
+
+        int sampleCount = REGIONAL_ATLAS_SIZE * REGIONAL_ATLAS_SIZE;
+        return new RegionalAtlasResult(
+            provinceColors,
+            moodColors,
+            rhythmColors,
+            hierarchyColors,
+            upliftColors,
+            provinceCounts,
+            moodCounts,
+            rhythmCounts,
+            hierarchySum / sampleCount,
+            upliftSum / sampleCount,
+            dramatic * 100.0 / sampleCount,
+            centerX,
+            centerZ,
+            halfSpan
         );
     }
 
@@ -326,8 +455,56 @@ public final class WorldgenSurvey {
         return Math.max(0, Math.min(255, (int) Math.round(value)));
     }
 
-    private static void writeMap(SurveyResult result, Path path) throws IOException {
-        int sourceSize = result.colors().length;
+    private static int provinceColor(RegionalFieldMath.Province province) {
+        return switch (province) {
+            case SEDIMENTARY_LOWLAND -> new Color(144, 166, 91).getRGB();
+            case WETLAND_BASIN -> new Color(54, 105, 88).getRGB();
+            case OLD_ERODED_HIGHLAND -> new Color(117, 112, 83).getRGB();
+            case YOUNG_FOLD_MOUNTAINS -> new Color(178, 184, 189).getRGB();
+            case GLACIAL_MASSIF -> new Color(193, 224, 235).getRGB();
+            case DRY_PLATEAU -> new Color(190, 112, 61).getRGB();
+            case VOLCANIC_BELT -> new Color(91, 68, 65).getRGB();
+            case KARST_BELT -> new Color(133, 157, 119).getRGB();
+            case OCEANIC_CRUST -> new Color(45, 79, 133).getRGB();
+            case MYCELIAL_CRATON -> new Color(147, 80, 145).getRGB();
+        };
+    }
+
+    private static int moodColor(RegionalFieldMath.Mood mood) {
+        return switch (mood) {
+            case TRANQUIL -> new Color(118, 183, 171).getRGB();
+            case PASTORAL -> new Color(170, 193, 104).getRGB();
+            case MYSTERIOUS -> new Color(65, 87, 90).getRGB();
+            case ANCIENT -> new Color(124, 103, 72).getRGB();
+            case MONUMENTAL -> new Color(172, 178, 191).getRGB();
+            case DESOLATE -> new Color(157, 137, 115).getRGB();
+            case ENCHANTED -> new Color(157, 95, 174).getRGB();
+            case DANGEROUS -> new Color(151, 62, 57).getRGB();
+            case SACRED -> new Color(222, 198, 116).getRGB();
+            case MELANCHOLIC -> new Color(93, 111, 148).getRGB();
+        };
+    }
+
+    private static int rhythmColor(RegionalFieldMath.Rhythm rhythm) {
+        return switch (rhythm) {
+            case QUIET -> new Color(77, 127, 151).getRGB();
+            case TRANSITIONAL -> new Color(157, 166, 104).getRGB();
+            case RECOVERY -> new Color(91, 153, 102).getRGB();
+            case DRAMATIC -> new Color(184, 73, 57).getRGB();
+        };
+    }
+
+    private static int scalarColor(double value, Color low, Color high) {
+        double t = Math.max(0.0, Math.min(1.0, value));
+        return new Color(
+            clampColor(low.getRed() + (high.getRed() - low.getRed()) * t),
+            clampColor(low.getGreen() + (high.getGreen() - low.getGreen()) * t),
+            clampColor(low.getBlue() + (high.getBlue() - low.getBlue()) * t)
+        ).getRGB();
+    }
+
+    private static void writeMap(int[][] colors, Path path) throws IOException {
+        int sourceSize = colors.length;
         BufferedImage image = new BufferedImage(
             sourceSize * IMAGE_SCALE,
             sourceSize * IMAGE_SCALE,
@@ -337,7 +514,7 @@ public final class WorldgenSurvey {
         try {
             for (int z = 0; z < sourceSize; z++) {
                 for (int x = 0; x < sourceSize; x++) {
-                    graphics.setColor(new Color(result.colors()[z][x]));
+                    graphics.setColor(new Color(colors[z][x]));
                     graphics.fillRect(
                         x * IMAGE_SCALE,
                         z * IMAGE_SCALE,
@@ -354,13 +531,23 @@ public final class WorldgenSurvey {
 
     private record SurveyResult(
         int[][] colors,
+        int[][] provinceColors,
+        int[][] moodColors,
+        int[][] rhythmColors,
+        int[][] hierarchyColors,
+        int[][] upliftColors,
         Map<String, Integer> biomeCounts,
+        Map<String, Integer> provinceCounts,
+        Map<String, Integer> moodCounts,
+        Map<String, Integer> rhythmCounts,
         int minHeight,
         int maxHeight,
         double meanHeight,
         double standardDeviation,
         double meanSlopePerFourBlocks,
-        double waterPercent
+        double waterPercent,
+        double meanHierarchyStrength,
+        double meanMacroUplift
     ) {
         String report() {
             StringBuilder report = new StringBuilder();
@@ -369,14 +556,21 @@ public final class WorldgenSurvey {
                 "height.min=%d%nheight.max=%d%nheight.mean=%.2f%n"
                     + "height.standard_deviation=%.2f%n"
                     + "slope.mean_per_4_blocks=%.2f%nwater.percent=%.2f%n"
-                    + "biomes.unique=%d%n%n",
+                    + "biomes.unique=%d%nprovince.unique=%d%n"
+                    + "mood.unique=%d%nrhythm.unique=%d%n"
+                    + "hierarchy.mean=%.4f%nmacro_uplift.mean=%.4f%n%n",
                 minHeight,
                 maxHeight,
                 meanHeight,
                 standardDeviation,
                 meanSlopePerFourBlocks,
                 waterPercent,
-                biomeCounts.size()
+                biomeCounts.size(),
+                provinceCounts.size(),
+                moodCounts.size(),
+                rhythmCounts.size(),
+                meanHierarchyStrength,
+                meanMacroUplift
             ));
             biomeCounts.entrySet().stream()
                 .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
@@ -386,6 +580,9 @@ public final class WorldgenSurvey {
                     entry.getKey(),
                     entry.getValue()
                 )));
+            appendCounts(report, "provinces", provinceCounts);
+            appendCounts(report, "moods", moodCounts);
+            appendCounts(report, "rhythm", rhythmCounts);
             report.append(String.format(Locale.ROOT, "%nfeatures.placed:%n"));
             FEATURE_COUNTS.entrySet().stream()
                 .sorted(Map.Entry.comparingByKey())
@@ -396,6 +593,85 @@ public final class WorldgenSurvey {
                     entry.getValue().sum()
                 )));
             return report.toString();
+        }
+
+        private static void appendCounts(
+            StringBuilder report,
+            String heading,
+            Map<String, Integer> counts
+        ) {
+            report.append(String.format(Locale.ROOT, "%n%s:%n", heading));
+            counts.entrySet().stream()
+                .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
+                .forEach(entry -> report.append(String.format(
+                    Locale.ROOT,
+                    "%s=%d%n",
+                    entry.getKey(),
+                    entry.getValue()
+                )));
+        }
+    }
+
+    private record RegionalAtlasResult(
+        int[][] provinceColors,
+        int[][] moodColors,
+        int[][] rhythmColors,
+        int[][] hierarchyColors,
+        int[][] upliftColors,
+        Map<String, Integer> provinceCounts,
+        Map<String, Integer> moodCounts,
+        Map<String, Integer> rhythmCounts,
+        double meanHierarchyStrength,
+        double meanMacroUplift,
+        double dramaticPercent,
+        int centerX,
+        int centerZ,
+        int halfSpan
+    ) {
+        String report() {
+            StringBuilder report = new StringBuilder();
+            report.append(String.format(
+                Locale.ROOT,
+                "center.x=%d%ncenter.z=%d%nspan.min_x=%d%nspan.max_x=%d%n"
+                    + "span.min_z=%d%nspan.max_z=%d%nsample.step=%d%n"
+                    + "sample.count=%d%nprovince.unique=%d%nmood.unique=%d%n"
+                    + "rhythm.unique=%d%nhierarchy.mean=%.4f%n"
+                    + "macro_uplift.mean=%.4f%ndramatic.percent=%.2f%n",
+                centerX,
+                centerZ,
+                centerX - halfSpan,
+                centerX + halfSpan,
+                centerZ - halfSpan,
+                centerZ + halfSpan,
+                REGIONAL_ATLAS_STEP,
+                REGIONAL_ATLAS_SIZE * REGIONAL_ATLAS_SIZE,
+                provinceCounts.size(),
+                moodCounts.size(),
+                rhythmCounts.size(),
+                meanHierarchyStrength,
+                meanMacroUplift,
+                dramaticPercent
+            ));
+            appendCounts(report, "provinces", provinceCounts);
+            appendCounts(report, "moods", moodCounts);
+            appendCounts(report, "rhythm", rhythmCounts);
+            return report.toString();
+        }
+
+        private static void appendCounts(
+            StringBuilder report,
+            String heading,
+            Map<String, Integer> counts
+        ) {
+            report.append(String.format(Locale.ROOT, "%n%s:%n", heading));
+            counts.entrySet().stream()
+                .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
+                .forEach(entry -> report.append(String.format(
+                    Locale.ROOT,
+                    "%s=%d%n",
+                    entry.getKey(),
+                    entry.getValue()
+                )));
         }
     }
 }

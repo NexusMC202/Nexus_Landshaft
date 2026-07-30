@@ -59,3 +59,15 @@ tasks.withType(ProcessResources).configureEach {
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
+
+tasks.register('regionalFieldTest', JavaExec) {
+    group = 'verification'
+    description = 'Runs deterministic and coverage checks for V2 regional field math.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.field.RegionalFieldMathSelfTest'
+}
+
+tasks.named('check') {
+    dependsOn regionalFieldTest
+}

@@ -15,6 +15,7 @@ import dev.nexusmc.landscape.worldgen.RareFlowerGrottoFeature;
 import dev.nexusmc.landscape.worldgen.RiverBankFeature;
 import dev.nexusmc.landscape.worldgen.SpiderNestFeature;
 import dev.nexusmc.landscape.worldgen.VolcanicCalderaFeature;
+import dev.nexusmc.landscape.worldgen.v2.NexusV2Registries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.levelgen.feature.Feature;
 import net.minecraft.world.level.levelgen.feature.configurations.NoneFeatureConfiguration;
@@ -61,6 +62,7 @@ public final class NexusLandscape {
 
     public NexusLandscape(IEventBus modBus) {
         FEATURES.register(modBus);
+        NexusV2Registries.register(modBus);
         NeoForge.EVENT_BUS.addListener(this::registerCommands);
         NeoForge.EVENT_BUS.addListener(WorldgenSurvey::onServerStarted);
     }
