@@ -221,6 +221,8 @@ public final class RegionalFieldMathSelfTest {
         int convergences = 0;
         int terminalNodes = 0;
         int lakeNodes = 0;
+        int openLakeNodes = 0;
+        int overflowNodes = 0;
         for (int cellZ = -12; cellZ <= 12; cellZ++) {
             for (int cellX = -12; cellX <= 12; cellX++) {
                 int incoming = 0;
@@ -243,6 +245,9 @@ public final class RegionalFieldMathSelfTest {
                     convergences++;
                 }
                 HydrologyMath.Node node = HydrologyMath.node(cellX, cellZ, noise);
+                if (HydrologyMath.downstream(node, noise) != null) {
+                    continue;
+                }
                 HydrologyMath.NodeInfo info = HydrologyMath.nodeInfo(node, noise);
                 require(
                     info.canonicalNodeId() == HydrologyMath.canonicalNodeId(cellX, cellZ),
@@ -261,12 +266,52 @@ public final class RegionalFieldMathSelfTest {
                         require(lake != null, "lake terminal has no bounded profile");
                         require(lake.maximumDepth() <= 12.0, "lake depth is unbounded");
                         require(lake.maximumArea() > 0.0, "lake area is empty");
+                        HydrologyMath.BasinSample basin = HydrologyMath.basinSample(
+                            (int)Math.round(node.x()),
+                            (int)Math.round(node.z()),
+                            noise
+                        );
+                        require(basin.mask() > 0.9, "lake center has no physical basin");
+                        if (!lake.closedBasin()) {
+                            require(
+                                lake.outletId() != HydrologyMath.NO_NODE,
+                                "open lake has no outlet"
+                            );
+                            openLakeNodes++;
+                        }
                     }
                 } else {
                     require(
                         info.terminalReason() == HydrologyMath.TerminalReason.NONE,
                         "non-terminal node has terminal reason"
                     );
+                }
+            }
+        }
+        for (int cellZ = -64; cellZ <= 64; cellZ++) {
+            for (int cellX = -64; cellX <= 64; cellX++) {
+                HydrologyMath.Node node = HydrologyMath.node(cellX, cellZ, noise);
+                HydrologyMath.NodeInfo info = HydrologyMath.nodeInfo(node, noise);
+                if (info.terminalReason()
+                    == HydrologyMath.TerminalReason.DETERMINISTIC_OVERFLOW_OUTLET) {
+                    HydrologyMath.Node outlet =
+                        HydrologyMath.overflowOutlet(node, noise);
+                    require(outlet != null, "overflow terminal has no breach outlet");
+                    require(
+                        info.outletId() == outlet.id(),
+                        "overflow outlet metadata mismatch"
+                    );
+                    HydrologyMath.BasinSample spill = HydrologyMath.basinSample(
+                        (int)Math.round(node.x()),
+                        (int)Math.round(node.z()),
+                        noise
+                    );
+                    require(
+                        spill.reason()
+                            == HydrologyMath.TerminalReason.DETERMINISTIC_OVERFLOW_OUTLET,
+                        "overflow has no physical channel profile"
+                    );
+                    overflowNodes++;
                 }
             }
         }
@@ -280,6 +325,11 @@ public final class RegionalFieldMathSelfTest {
             convergences,
             terminalNodes,
             lakeNodes
+        );
+        System.out.printf(
+            "hydrology physicalBasins openLakes=%d overflowChannels=%d%n",
+            openLakeNodes,
+            overflowNodes
         );
     }
 
@@ -415,6 +465,14 @@ public final class RegionalFieldMathSelfTest {
         requireClose(actual.bedY(), expected.bedY(), 0.0, description + " bed");
         requireClose(actual.waterY(), expected.waterY(), 0.0, description + " water");
         require(actual.order() == expected.order(), description + " order");
+        require(
+            actual.accumulation() == expected.accumulation(),
+            description + " accumulation"
+        );
+        require(
+            actual.canonicalSegmentId() == expected.canonicalSegmentId(),
+            description + " canonical segment"
+        );
     }
 
     private static double wave(int x, int z, double scale, double phase) {

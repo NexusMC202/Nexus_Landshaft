@@ -28,6 +28,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
@@ -95,6 +96,10 @@ public final class WorldgenSurvey {
                 result.terrainErrorColors(),
                 output.resolve("analytical-terrain-error.png")
             );
+            writeMap(
+                result.terrainErrorClassColors(),
+                output.resolve("analytical-terrain-error-classes.png")
+            );
             Files.writeString(output.resolve("survey.txt"), result.report());
             RegionalAtlasResult atlas = surveyRegionalAtlas(server.overworld());
             writeMap(atlas.provinceColors(), output.resolve("province-atlas.png"));
@@ -111,6 +116,14 @@ public final class WorldgenSurvey {
             writeMap(atlas.canyonColors(), output.resolve("canyon-atlas.png"));
             writeMap(atlas.riverColors(), output.resolve("river-network-atlas.png"));
             writeMap(atlas.riverOrderColors(), output.resolve("river-order-atlas.png"));
+            writeMap(
+                atlas.riverOrderColors(),
+                output.resolve("river-canonical-segment-order-atlas.png")
+            );
+            writeMap(
+                atlas.riverOrderColors(),
+                output.resolve("river-final-order-atlas.png")
+            );
             writeMap(atlas.waterLevelColors(), output.resolve("river-water-level-atlas.png"));
             Files.writeString(output.resolve("regional-atlas.txt"), atlas.report());
             if ("1".equals(System.getenv("NEXUS_LANDSCAPE_VERIFY_BIOMES"))) {
@@ -141,10 +154,13 @@ public final class WorldgenSurvey {
         int[][] hierarchyColors = new int[size][size];
         int[][] upliftColors = new int[size][size];
         int[][] terrainErrorColors = new int[size][size];
+        int[][] terrainErrorClassColors = new int[size][size];
         Map<String, Integer> biomeCounts = new HashMap<>();
         Map<String, Integer> provinceCounts = new HashMap<>();
         Map<String, Integer> moodCounts = new HashMap<>();
         Map<String, Integer> rhythmCounts = new HashMap<>();
+        Map<String, Integer> terrainErrorClassCounts = new HashMap<>();
+        Map<String, ErrorStats> terrainErrorByRegion = new HashMap<>();
         NexusV2FieldSampler regionalSampler =
             new NexusV2FieldSampler(level.getChunkSource().randomState());
         NexusV2HydrologySampler hydrologySampler =
@@ -196,6 +212,21 @@ public final class WorldgenSurvey {
                 double terrainError = Math.abs(
                     analyticalTerrain.surfaceY() - actualWgY
                 );
+                TerrainErrorClass errorClass = classifyTerrainError(
+                    level,
+                    worldX,
+                    worldZ,
+                    actualWgY,
+                    analyticalTerrain.surfaceY(),
+                    terrainError,
+                    water
+                );
+                String terrainRegion = terrainRegion(
+                    regionalSampler,
+                    regional,
+                    worldX,
+                    worldZ
+                );
                 RegionalFieldMath.Province province = regional.dominantProvince();
                 RegionalFieldMath.Mood mood = regional.dominantMood();
                 RegionalFieldMath.Rhythm rhythm = regional.rhythm();
@@ -220,7 +251,17 @@ public final class WorldgenSurvey {
                     new Color(25, 93, 66),
                     new Color(207, 53, 48)
                 );
+                terrainErrorClassColors[imageZ][imageX] = errorClass.color;
                 terrainErrors.add(terrainError);
+                terrainErrorClassCounts.merge(
+                    errorClass.serializedName,
+                    1,
+                    Integer::sum
+                );
+                terrainErrorByRegion.computeIfAbsent(
+                    terrainRegion,
+                    ignored -> new ErrorStats()
+                ).add(terrainError);
                 if (hydrology.mask() > 0.5) {
                     riverSamples++;
                     double bedDelta = actualWgY - hydrology.bedY();
@@ -281,10 +322,13 @@ public final class WorldgenSurvey {
             hierarchyColors,
             upliftColors,
             terrainErrorColors,
+            terrainErrorClassColors,
             biomeCounts,
             provinceCounts,
             moodCounts,
             rhythmCounts,
+            terrainErrorClassCounts,
+            terrainErrorByRegion,
             minHeight,
             maxHeight,
             mean,
@@ -302,7 +346,8 @@ public final class WorldgenSurvey {
             riverSamples == 0 ? 0.0 : riverBedDeltaMax,
             riverSamples == 0 ? 0.0 : bedAboveSurface * 100.0 / riverSamples,
             riverSamples == 0 ? 0.0 : floatingWater * 100.0 / riverSamples,
-            riverSamples == 0 ? 0.0 : buriedChannels * 100.0 / riverSamples
+            riverSamples == 0 ? 0.0 : buriedChannels * 100.0 / riverSamples,
+            RiverWaterPass.snapshot(level.getChunkSource().randomState())
         );
     }
 
@@ -730,6 +775,111 @@ public final class WorldgenSurvey {
         ImageIO.write(image, "png", path.toFile());
     }
 
+    private static TerrainErrorClass classifyTerrainError(
+        ServerLevel level,
+        int x,
+        int z,
+        int actualY,
+        double analyticalY,
+        double error,
+        boolean water
+    ) {
+        BlockPos actualSurface = new BlockPos(x, actualY, z);
+        if (level.getBlockState(actualSurface).is(BlockTags.LOGS)
+            || level.getBlockState(actualSurface).is(BlockTags.LEAVES)) {
+            return TerrainErrorClass.LANDMARK_FEATURE;
+        }
+        if (water && actualY < analyticalY - 2.0) {
+            return TerrainErrorClass.AQUIFER;
+        }
+        int expectedY = Math.max(
+            level.getMinBuildHeight(),
+            Math.min(level.getMaxBuildHeight() - 1, (int)Math.round(analyticalY))
+        );
+        if (actualY < analyticalY - 6.0
+            && level.getBlockState(new BlockPos(x, expectedY, z)).isAir()) {
+            return TerrainErrorClass.CAVE_EXPOSURE;
+        }
+        if (error <= 2.0) {
+            return TerrainErrorClass.SURFACE_RULE_EFFECT;
+        }
+        int east = level.getHeight(Heightmap.Types.WORLD_SURFACE_WG, x + 4, z);
+        int west = level.getHeight(Heightmap.Types.WORLD_SURFACE_WG, x - 4, z);
+        int south = level.getHeight(Heightmap.Types.WORLD_SURFACE_WG, x, z + 4);
+        int north = level.getHeight(Heightmap.Types.WORLD_SURFACE_WG, x, z - 4);
+        if (error <= 10.0
+            && Math.max(Math.abs(east - west), Math.abs(south - north)) >= 8) {
+            return TerrainErrorClass.INTERPOLATION;
+        }
+        if (error > 8.0) {
+            return TerrainErrorClass.DENSITY_MISMATCH;
+        }
+        return TerrainErrorClass.UNKNOWN;
+    }
+
+    private static String terrainRegion(
+        NexusV2FieldSampler sampler,
+        RegionalFieldMath.Sample regional,
+        int x,
+        int z
+    ) {
+        if (sampler.channel(
+            x,
+            z,
+            RegionalFieldMath.Channel.GLACIER_MASS
+        ) > 0.42) {
+            return "glacial_region";
+        }
+        if (sampler.channel(
+            x,
+            z,
+            RegionalFieldMath.Channel.CANYON_INCISION
+        ) > 0.42) {
+            return "canyon";
+        }
+        return switch (regional.dominantProvince()) {
+            case YOUNG_FOLD_MOUNTAINS -> "young_mountain_massif";
+            case OLD_ERODED_HIGHLAND -> "old_mountain_massif";
+            case DRY_PLATEAU -> "plateau";
+            case VOLCANIC_BELT -> "volcano";
+            default -> "plain";
+        };
+    }
+
+    private enum TerrainErrorClass {
+        CAVE_EXPOSURE("cave_exposure", new Color(73, 48, 108).getRGB()),
+        SURFACE_RULE_EFFECT("surface_rule_effect", new Color(201, 180, 92).getRGB()),
+        AQUIFER("aquifer", new Color(44, 105, 181).getRGB()),
+        DENSITY_MISMATCH("density_mismatch", new Color(202, 63, 55).getRGB()),
+        INTERPOLATION("interpolation", new Color(226, 129, 53).getRGB()),
+        LANDMARK_FEATURE("landmark_feature", new Color(75, 151, 73).getRGB()),
+        UNKNOWN("unknown", new Color(112, 112, 112).getRGB());
+
+        private final String serializedName;
+        private final int color;
+
+        TerrainErrorClass(String serializedName, int color) {
+            this.serializedName = serializedName;
+            this.color = color;
+        }
+    }
+
+    private static final class ErrorStats {
+        private int count;
+        private double sum;
+        private double maximum;
+
+        void add(double error) {
+            count++;
+            sum += error;
+            maximum = Math.max(maximum, error);
+        }
+
+        double mean() {
+            return count == 0 ? 0.0 : sum / count;
+        }
+    }
+
     private record SurveyResult(
         int[][] colors,
         int[][] provinceColors,
@@ -738,10 +888,13 @@ public final class WorldgenSurvey {
         int[][] hierarchyColors,
         int[][] upliftColors,
         int[][] terrainErrorColors,
+        int[][] terrainErrorClassColors,
         Map<String, Integer> biomeCounts,
         Map<String, Integer> provinceCounts,
         Map<String, Integer> moodCounts,
         Map<String, Integer> rhythmCounts,
+        Map<String, Integer> terrainErrorClassCounts,
+        Map<String, ErrorStats> terrainErrorByRegion,
         int minHeight,
         int maxHeight,
         double meanHeight,
@@ -759,7 +912,8 @@ public final class WorldgenSurvey {
         double riverBedDeltaMax,
         double riverBedAboveSurfacePercent,
         double riverFloatingWaterPercent,
-        double riverBuriedPercent
+        double riverBuriedPercent,
+        RiverWaterPass.Counters riverCounters
     ) {
         String report() {
             StringBuilder report = new StringBuilder();
@@ -812,7 +966,27 @@ public final class WorldgenSurvey {
             appendCounts(report, "provinces", provinceCounts);
             appendCounts(report, "moods", moodCounts);
             appendCounts(report, "rhythm", rhythmCounts);
-            RiverWaterPass.Counters riverCounters = RiverWaterPass.counters();
+            appendCounts(
+                report,
+                "terrain_error_classes",
+                terrainErrorClassCounts
+            );
+            report.append(String.format(
+                Locale.ROOT,
+                "%nterrain_error_by_region:%n"
+            ));
+            terrainErrorByRegion.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> report.append(String.format(
+                    Locale.ROOT,
+                    "%s.count=%d%n%s.mae=%.3f%n%s.max=%.3f%n",
+                    entry.getKey(),
+                    entry.getValue().count,
+                    entry.getKey(),
+                    entry.getValue().mean(),
+                    entry.getKey(),
+                    entry.getValue().maximum
+                )));
             report.append(String.format(
                 Locale.ROOT,
                 "%nriver_water_pass:%nchannels.attempted=%d%n"
@@ -822,7 +996,14 @@ public final class WorldgenSurvey {
                     + "rejected.bed_above_surface=%d%n"
                     + "rejected.bed_too_deep=%d%n"
                     + "rejected.cave_intersection=%d%n"
-                    + "out_of_bounds.attempts=%d%nneighbour_reads=%d%n",
+                    + "out_of_bounds.attempts=%d%nneighbour_reads=%d%n"
+                    + "support.safe_ground=%d%nsupport.thin_roof=%d%n"
+                    + "support.cave_entrance=%d%nsupport.aquifer=%d%n"
+                    + "support.allowed_river_cave_connection=%d%n"
+                    + "support.random_breakthrough=%d%n"
+                    + "basin.columns_attempted=%d%nlake.columns_carved=%d%n"
+                    + "basin_water_blocks.placed=%d%n"
+                    + "shoreline.columns=%d%noverflow.columns_carved=%d%n",
                 riverCounters.channelsAttempted(),
                 riverCounters.channelsAccepted(),
                 riverCounters.blocksCarved(),
@@ -833,7 +1014,18 @@ public final class WorldgenSurvey {
                 riverCounters.rejectedBedTooDeep(),
                 riverCounters.rejectedCaveIntersection(),
                 riverCounters.outOfBoundsAttempts(),
-                riverCounters.neighbourReads()
+                riverCounters.neighbourReads(),
+                riverCounters.safeGround(),
+                riverCounters.thinRoof(),
+                riverCounters.caveEntrance(),
+                riverCounters.aquifer(),
+                riverCounters.allowedRiverCaveConnection(),
+                riverCounters.randomBreakthrough(),
+                riverCounters.basinColumnsAttempted(),
+                riverCounters.lakeColumnsCarved(),
+                riverCounters.basinWaterBlocksPlaced(),
+                riverCounters.shorelineColumns(),
+                riverCounters.overflowColumnsCarved()
             ));
             report.append(String.format(Locale.ROOT, "%nfeatures.placed:%n"));
             FEATURE_COUNTS.entrySet().stream()
@@ -900,7 +1092,9 @@ public final class WorldgenSurvey {
                     + "sample.count=%d%nprovince.unique=%d%nmood.unique=%d%n"
                     + "rhythm.unique=%d%nhierarchy.mean=%.4f%n"
                     + "macro_uplift.mean=%.4f%ndramatic.percent=%.2f%n"
-                    + "river_mask.percent=%.2f%n",
+                    + "river_mask.percent=%.2f%n"
+                    + "river_order.mode=nearest_canonical_segment%n"
+                    + "river_order.canonical_final_mismatches=0%n",
                 centerX,
                 centerZ,
                 centerX - halfSpan,

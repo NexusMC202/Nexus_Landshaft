@@ -20,6 +20,8 @@ public final class HydrologyMath {
         double bestBedY = 61.0;
         double bestWaterY = 63.0;
         int bestOrder = 0;
+        long bestAccumulation = 0L;
+        long bestSegmentId = NO_NODE;
         double bestFlowX = 0.0;
         double bestFlowZ = 1.0;
         Node bestSource = null;
@@ -52,6 +54,8 @@ public final class HydrologyMath {
 
         if (bestSource != null) {
             bestOrder = streamOrder(bestSource, bestTarget, noise);
+            bestAccumulation = upstreamAccumulation(bestSource, noise, 5);
+            bestSegmentId = bestSource.id;
             double localTerrainY = noise.terrainY(blockX, blockZ);
             double maximumIncision = 4.5 + bestOrder * 1.5;
             bestBedY = Math.max(bestBedY, localTerrainY - maximumIncision);
@@ -64,6 +68,8 @@ public final class HydrologyMath {
             bestDistance - BASE_HALF_WIDTH,
             clamp01(mask),
             bestOrder,
+            bestAccumulation,
+            bestSegmentId,
             bestBedY,
             bestWaterY,
             bestFlowX,
@@ -148,12 +154,20 @@ public final class HydrologyMath {
         }
         Node immediate = downstream(node, noise);
         TerminalReason reason = terminalReason(terminal, noise);
+        Node outlet = reason == TerminalReason.DETERMINISTIC_OVERFLOW_OUTLET
+            ? overflowOutlet(terminal, noise)
+            : null;
+        LakeProfile terminalLake = reason == TerminalReason.LAKE
+            ? lakeProfile(terminal, noise)
+            : null;
         long accumulation = upstreamAccumulation(node, noise, 5);
         return new NodeInfo(
             node.id,
             immediate == null ? NO_NODE : immediate.id,
             terminal.id,
-            terminal.id,
+            terminalLake != null && terminalLake.outletId != NO_NODE
+                ? terminalLake.outletId
+                : outlet == null ? terminal.id : outlet.id,
             streamOrder(
                 node,
                 immediate == null ? node : immediate,
@@ -176,6 +190,8 @@ public final class HydrologyMath {
         );
         double radius = 72.0 + selector * 156.0;
         double maxDepth = 4.0 + selector * 8.0;
+        boolean closed = mix64(node.id ^ 0xBB67AE8584CAA73BL) % 5L == 0L;
+        Node outlet = closed ? null : overflowOutlet(node, noise);
         return new LakeProfile(
             node.id,
             node.x,
@@ -185,9 +201,142 @@ public final class HydrologyMath {
             node.waterY,
             maxDepth,
             upstreamAccumulation(node, noise, 5),
-            NO_NODE,
-            true
+            outlet == null ? NO_NODE : outlet.id,
+            outlet == null
         );
+    }
+
+    /**
+     * Bounded physical basin view used by the chunk-local lake/overflow pass.
+     */
+    public static BasinSample basinSample(
+        int blockX,
+        int blockZ,
+        NoiseSource noise
+    ) {
+        int centerCellX = Math.floorDiv(blockX, BASIN_SIZE);
+        int centerCellZ = Math.floorDiv(blockZ, BASIN_SIZE);
+        BasinSample best = BasinSample.NONE;
+        for (int cellZ = centerCellZ - 2; cellZ <= centerCellZ + 2; cellZ++) {
+            for (int cellX = centerCellX - 2; cellX <= centerCellX + 2; cellX++) {
+                Node terminal = node(cellX, cellZ, noise);
+                TerminalReason reason = terminalReason(terminal, noise);
+                if (reason == TerminalReason.LAKE) {
+                    LakeProfile lake = lakeProfile(terminal, noise);
+                    double warp = noise.tributary(
+                        blockX / 1_024.0,
+                        blockZ / 1_024.0
+                    ) * lake.boundaryRadius * 0.11;
+                    double distance = Math.hypot(
+                        blockX - terminal.x + warp,
+                        blockZ - terminal.z - warp * 0.55
+                    );
+                    double radial = distance / lake.boundaryRadius;
+                    if (radial <= 1.32 && radial < best.radialDistance) {
+                        double interior = clamp01(1.0 - radial * radial);
+                        best = new BasinSample(
+                            reason,
+                            terminal.id,
+                            lake.outletId,
+                            radial,
+                            interior,
+                            smoothstep(0.82, 1.0, radial)
+                                * (1.0 - smoothstep(1.0, 1.24, radial)),
+                            lake.waterSurfaceY - lake.maximumDepth * interior,
+                            lake.waterSurfaceY,
+                            lake.closedBasin
+                        );
+                    }
+                    if (!lake.closedBasin) {
+                        Node outlet = overflowOutlet(terminal, noise);
+                        Curve spill = curve(terminal, outlet, noise);
+                        Projection projection = project(blockX, blockZ, spill);
+                        double width = 13.0;
+                        if (radial > 0.78
+                            && projection.distance <= width * 2.4
+                            && projection.distance / width < best.radialDistance) {
+                            double spillBed = lerp(
+                                lake.waterSurfaceY - 2.0,
+                                Math.min(
+                                    outlet.bedY,
+                                    lake.waterSurfaceY - 4.0
+                                ),
+                                projection.t
+                            );
+                            best = new BasinSample(
+                                TerminalReason.DETERMINISTIC_OVERFLOW_OUTLET,
+                                terminal.id,
+                                outlet.id,
+                                projection.distance / width,
+                                1.0 - smoothstep(
+                                    width,
+                                    width * 2.4,
+                                    projection.distance
+                                ),
+                                0.0,
+                                spillBed,
+                                spillBed + 1.25,
+                                false
+                            );
+                        }
+                    }
+                } else if (reason == TerminalReason.DETERMINISTIC_OVERFLOW_OUTLET) {
+                    Node outlet = overflowOutlet(terminal, noise);
+                    if (outlet == null) {
+                        continue;
+                    }
+                    Curve spill = curve(terminal, outlet, noise);
+                    Projection projection = project(blockX, blockZ, spill);
+                    double width = 11.0;
+                    if (projection.distance <= width * 2.4
+                        && projection.distance / width < best.radialDistance) {
+                        double mask = 1.0 - smoothstep(
+                            width,
+                            width * 2.4,
+                            projection.distance
+                        );
+                        double spillBed = lerp(
+                            terminal.bedY,
+                            Math.min(outlet.bedY, terminal.bedY - 3.0),
+                            projection.t
+                        );
+                        best = new BasinSample(
+                            reason,
+                            terminal.id,
+                            outlet.id,
+                            projection.distance / width,
+                            mask,
+                            0.0,
+                            spillBed,
+                            spillBed + 1.25,
+                            false
+                        );
+                    }
+                }
+            }
+        }
+        return best;
+    }
+
+    public static Node overflowOutlet(Node node, NoiseSource noise) {
+        Node best = null;
+        double bestScore = Double.POSITIVE_INFINITY;
+        for (int dz = -1; dz <= 1; dz++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                if (dx == 0 && dz == 0) {
+                    continue;
+                }
+                Node candidate = node(node.cellX + dx, node.cellZ + dz, noise);
+                double rise = Math.max(0.0, candidate.routingY - node.routingY);
+                double score = rise * 4.0 + candidate.routingY
+                    + ((mix64(candidate.id ^ node.id) & 0xFFFFL) / 65535.0) * 0.01;
+                if (score < bestScore) {
+                    best = candidate;
+                    bestScore = score;
+                }
+            }
+        }
+        return best;
     }
 
     private static TerminalReason terminalReason(Node node, NoiseSource noise) {
@@ -380,6 +529,8 @@ public final class HydrologyMath {
         double signedDistance,
         double mask,
         int order,
+        long accumulation,
+        long canonicalSegmentId,
         double bedY,
         double waterY,
         double flowX,
@@ -428,6 +579,30 @@ public final class HydrologyMath {
         long outletId,
         boolean closedBasin
     ) {
+    }
+
+    public record BasinSample(
+        TerminalReason reason,
+        long basinId,
+        long outletId,
+        double radialDistance,
+        double mask,
+        double shorelineWeight,
+        double bedY,
+        double waterY,
+        boolean closedBasin
+    ) {
+        private static final BasinSample NONE = new BasinSample(
+            TerminalReason.NONE,
+            NO_NODE,
+            NO_NODE,
+            Double.POSITIVE_INFINITY,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            false
+        );
     }
 
     public enum TerminalReason {

@@ -26,7 +26,15 @@ public final class NexusV2HydrologySampler {
     }
 
     public HydrologyMath.Sample sample(int blockX, int blockZ) {
-        return HydrologyMath.sample(blockX, blockZ, new HydrologyMath.NoiseSource() {
+        return HydrologyMath.sample(blockX, blockZ, noiseSource());
+    }
+
+    public HydrologyMath.BasinSample basinSample(int blockX, int blockZ) {
+        return HydrologyMath.basinSample(blockX, blockZ, noiseSource());
+    }
+
+    private HydrologyMath.NoiseSource noiseSource() {
+        return new HydrologyMath.NoiseSource() {
             @Override
             public double layout(double x, double z) {
                 return NexusV2HydrologySampler.this.layout.getValue(x, 0.0, z);
@@ -55,6 +63,6 @@ public final class NexusV2HydrologySampler {
                 terrainYCache.put(key, sampled);
                 return sampled;
             }
-        });
+        };
     }
 }
