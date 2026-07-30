@@ -28,6 +28,7 @@ public final class RegionalFieldMathSelfTest {
         verifyLandformChannels();
         verifyHydrologyGraph();
         verifyHydrologyRequestOrderAndThreads();
+        verifyBasinSeamsAndConcurrency();
         System.out.println("RegionalFieldMathSelfTest: PASS");
     }
 
@@ -446,6 +447,184 @@ public final class RegionalFieldMathSelfTest {
         );
     }
 
+    private static void verifyBasinSeamsAndConcurrency() {
+        HydrologyMath.NoiseSource warmNoise = syntheticHydrologyNoise();
+        List<int[]> coordinates = new ArrayList<>();
+        for (int boundary = -64; boundary <= 64; boundary++) {
+            int chunkBoundary = boundary * 16;
+            coordinates.add(new int[] {chunkBoundary - 1, -769});
+            coordinates.add(new int[] {chunkBoundary, -769});
+            coordinates.add(new int[] {chunkBoundary - 1, 0});
+            coordinates.add(new int[] {chunkBoundary, 0});
+        }
+        for (int tile = -8; tile <= 8; tile++) {
+            int tileBoundary = tile * HydrologyMath.BASIN_SIZE;
+            coordinates.add(new int[] {tileBoundary - 1, -17});
+            coordinates.add(new int[] {tileBoundary, -17});
+            coordinates.add(new int[] {-17, tileBoundary - 1});
+            coordinates.add(new int[] {-17, tileBoundary});
+        }
+        for (int z : new int[] {-17, -16, -1, 0, 15, 16}) {
+            for (int x : new int[] {-17, -16, -1, 0, 15, 16}) {
+                coordinates.add(new int[] {x, z});
+            }
+        }
+        int targetedBasins = 0;
+        for (int cellZ = -32; cellZ <= 32 && targetedBasins < 6; cellZ++) {
+            for (int cellX = -32; cellX <= 32 && targetedBasins < 6; cellX++) {
+                HydrologyMath.Node node = HydrologyMath.node(
+                    cellX,
+                    cellZ,
+                    warmNoise
+                );
+                if (HydrologyMath.downstream(node, warmNoise) != null) {
+                    continue;
+                }
+                HydrologyMath.NodeInfo info = HydrologyMath.nodeInfo(
+                    node,
+                    warmNoise
+                );
+                if (info.terminalReason() == HydrologyMath.TerminalReason.OCEAN_OUTLET
+                    || info.terminalReason() == HydrologyMath.TerminalReason.WETLAND_SINK) {
+                    continue;
+                }
+                int centerX = (int)Math.round(node.x());
+                int centerZ = (int)Math.round(node.z());
+                int chunkBoundaryX = Math.floorDiv(centerX, 16) * 16;
+                int chunkBoundaryZ = Math.floorDiv(centerZ, 16) * 16;
+                coordinates.add(new int[] {centerX, centerZ});
+                coordinates.add(new int[] {centerX + 1, centerZ});
+                coordinates.add(new int[] {chunkBoundaryX - 1, centerZ});
+                coordinates.add(new int[] {chunkBoundaryX, centerZ});
+                coordinates.add(new int[] {
+                    chunkBoundaryX - 1,
+                    chunkBoundaryZ - 1
+                });
+                coordinates.add(new int[] {
+                    chunkBoundaryX,
+                    chunkBoundaryZ
+                });
+                targetedBasins++;
+            }
+        }
+
+        Map<Long, HydrologyMath.BasinSample> baseline = new HashMap<>();
+        for (int[] coordinate : coordinates) {
+            baseline.put(
+                coordinateKey(coordinate[0], coordinate[1]),
+                HydrologyMath.basinSample(
+                    coordinate[0],
+                    coordinate[1],
+                    warmNoise
+                )
+            );
+        }
+        List<int[]> reversed = new ArrayList<>(coordinates);
+        Collections.reverse(reversed);
+        HydrologyMath.NoiseSource coldNoise = syntheticHydrologyNoise();
+        for (int[] coordinate : reversed) {
+            HydrologyMath.BasinSample expected = baseline.get(
+                coordinateKey(coordinate[0], coordinate[1])
+            );
+            requireBasinSampleEquals(
+                expected,
+                HydrologyMath.basinSample(
+                    coordinate[0],
+                    coordinate[1],
+                    warmNoise
+                ),
+                "warm/reverse basin query"
+            );
+            requireBasinSampleEquals(
+                expected,
+                HydrologyMath.basinSample(
+                    coordinate[0],
+                    coordinate[1],
+                    coldNoise
+                ),
+                "cold basin query"
+            );
+        }
+
+        int continuityChecks = 0;
+        for (int index = 1; index < coordinates.size(); index += 2) {
+            int[] leftCoordinate = coordinates.get(index - 1);
+            int[] rightCoordinate = coordinates.get(index);
+            HydrologyMath.BasinSample left = HydrologyMath.basinSample(
+                leftCoordinate[0],
+                leftCoordinate[1],
+                warmNoise
+            );
+            HydrologyMath.BasinSample right = HydrologyMath.basinSample(
+                rightCoordinate[0],
+                rightCoordinate[1],
+                warmNoise
+            );
+            if (left.basinId() == HydrologyMath.NO_NODE
+                || left.basinId() != right.basinId()
+                || left.reason() != right.reason()) {
+                continue;
+            }
+            require(
+                Math.abs(left.mask() - right.mask()) < 0.20,
+                "basin mask seam discontinuity"
+            );
+            require(
+                Math.abs(left.shorelineWeight() - right.shorelineWeight()) < 0.08,
+                "basin shoreline seam discontinuity"
+            );
+            require(
+                Math.abs(left.bedY() - right.bedY()) < 1.25,
+                "basin bed seam discontinuity"
+            );
+            require(
+                Math.abs(left.waterY() - right.waterY()) < 1.25,
+                "basin water seam discontinuity"
+            );
+            require(
+                Math.abs(left.radialDistance() - right.radialDistance()) < 0.16,
+                "basin radial seam discontinuity"
+            );
+            require(left.outletId() == right.outletId(), "basin outlet seam mismatch");
+            continuityChecks++;
+        }
+
+        ExecutorService executor = Executors.newFixedThreadPool(4);
+        try {
+            List<Future<HydrologyMath.BasinSample>> futures = new ArrayList<>();
+            for (int[] coordinate : coordinates) {
+                futures.add(executor.submit(() -> HydrologyMath.basinSample(
+                    coordinate[0],
+                    coordinate[1],
+                    warmNoise
+                )));
+            }
+            for (int index = 0; index < coordinates.size(); index++) {
+                int[] coordinate = coordinates.get(index);
+                try {
+                    requireBasinSampleEquals(
+                        baseline.get(coordinateKey(coordinate[0], coordinate[1])),
+                        futures.get(index).get(),
+                        "multi-thread basin query"
+                    );
+                } catch (Exception exception) {
+                    throw new AssertionError(
+                        "parallel basin sampling failed",
+                        exception
+                    );
+                }
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+        System.out.printf(
+            "basin seams samples=%d targeted=%d continuity=%d cold/warm/reverse/thread=PASS%n",
+            coordinates.size(),
+            targetedBasins,
+            continuityChecks
+        );
+    }
+
     private static long coordinateKey(int x, int z) {
         return ((long)x << 32) ^ (z & 0xFFFF_FFFFL);
     }
@@ -472,6 +651,34 @@ public final class RegionalFieldMathSelfTest {
         require(
             actual.canonicalSegmentId() == expected.canonicalSegmentId(),
             description + " canonical segment"
+        );
+    }
+
+    private static void requireBasinSampleEquals(
+        HydrologyMath.BasinSample expected,
+        HydrologyMath.BasinSample actual,
+        String description
+    ) {
+        require(expected.reason() == actual.reason(), description + " reason");
+        require(expected.basinId() == actual.basinId(), description + " basin id");
+        require(expected.outletId() == actual.outletId(), description + " outlet id");
+        if (expected.reason() == HydrologyMath.TerminalReason.NONE) {
+            return;
+        }
+        requireClose(actual.mask(), expected.mask(), 0.0, description + " mask");
+        requireClose(
+            actual.shorelineWeight(),
+            expected.shorelineWeight(),
+            0.0,
+            description + " shoreline"
+        );
+        requireClose(actual.bedY(), expected.bedY(), 0.0, description + " bed");
+        requireClose(actual.waterY(), expected.waterY(), 0.0, description + " water");
+        requireClose(
+            actual.radialDistance(),
+            expected.radialDistance(),
+            0.0,
+            description + " radial"
         );
     }
 

@@ -83,15 +83,33 @@ public final class WorldgenSurvey {
     private static void runAndStop(MinecraftServer server) {
         try {
             FEATURE_COUNTS.clear();
-            SurveyResult result = survey(server.overworld());
             Path output = Path.of("..", "build", "reports", "nexus-worldgen");
             Files.createDirectories(output);
+            if ("1".equals(System.getenv("NEXUS_LANDSCAPE_CASE_SCAN_ONLY"))) {
+                Files.writeString(
+                    output.resolve("hydrology-cases.txt"),
+                    findHydrologyCases(server.overworld())
+                );
+                LOGGER.info(
+                    "Nexus hydrology case scan complete: {}",
+                    output.toAbsolutePath().normalize()
+                );
+                return;
+            }
+            RiverWaterPass.snapshotAndReset(
+                server.overworld().getChunkSource().randomState()
+            );
+            SurveyResult result = survey(server.overworld());
             writeMap(result.colors(), output.resolve("survey.png"));
             writeMap(result.provinceColors(), output.resolve("province.png"));
             writeMap(result.moodColors(), output.resolve("mood.png"));
             writeMap(result.rhythmColors(), output.resolve("rhythm.png"));
             writeMap(result.hierarchyColors(), output.resolve("hierarchy.png"));
             writeMap(result.upliftColors(), output.resolve("macro-uplift.png"));
+            writeMap(
+                result.basinHydrologyColors(),
+                output.resolve("targeted-hydrology-atlas-crop.png")
+            );
             writeMap(
                 result.terrainErrorColors(),
                 output.resolve("analytical-terrain-error.png")
@@ -101,6 +119,13 @@ public final class WorldgenSurvey {
                 output.resolve("analytical-terrain-error-classes.png")
             );
             Files.writeString(output.resolve("survey.txt"), result.report());
+            if ("1".equals(System.getenv("NEXUS_LANDSCAPE_TARGETED_ONLY"))) {
+                LOGGER.info(
+                    "Nexus targeted worldgen survey complete: {}",
+                    output.toAbsolutePath().normalize()
+                );
+                return;
+            }
             RegionalAtlasResult atlas = surveyRegionalAtlas(server.overworld());
             writeMap(atlas.provinceColors(), output.resolve("province-atlas.png"));
             writeMap(atlas.moodColors(), output.resolve("mood-atlas.png"));
@@ -124,6 +149,18 @@ public final class WorldgenSurvey {
                 atlas.riverOrderColors(),
                 output.resolve("river-final-order-atlas.png")
             );
+            writeMap(
+                atlas.rawDrainageGraphColors(),
+                output.resolve("river-raw-drainage-graph.png")
+            );
+            writeMap(
+                atlas.finalCenterlineColors(),
+                output.resolve("river-final-warped-centerlines.png")
+            );
+            writeMap(
+                atlas.defectOverlayColors(),
+                output.resolve("river-defect-overlay.png")
+            );
             writeMap(atlas.waterLevelColors(), output.resolve("river-water-level-atlas.png"));
             Files.writeString(output.resolve("regional-atlas.txt"), atlas.report());
             if ("1".equals(System.getenv("NEXUS_LANDSCAPE_VERIFY_BIOMES"))) {
@@ -138,6 +175,160 @@ public final class WorldgenSurvey {
         } finally {
             server.halt(false);
         }
+    }
+
+    private static String findHydrologyCases(ServerLevel level) {
+        NexusV2HydrologySampler hydrology =
+            new NexusV2HydrologySampler(level.getChunkSource().randomState());
+        int centerX = surveyCenter("NEXUS_LANDSCAPE_SURVEY_CENTER_X");
+        int centerZ = surveyCenter("NEXUS_LANDSCAPE_SURVEY_CENTER_Z");
+        int centerCellX = Math.floorDiv(centerX, HydrologyMath.BASIN_SIZE);
+        int centerCellZ = Math.floorDiv(centerZ, HydrologyMath.BASIN_SIZE);
+        int radius = environmentInteger(
+            "NEXUS_LANDSCAPE_CASE_SCAN_RADIUS_CELLS",
+            64
+        );
+        Map<String, List<String>> cases = new HashMap<>();
+        for (int cellZ = centerCellZ - radius; cellZ <= centerCellZ + radius; cellZ++) {
+            for (int cellX = centerCellX - radius; cellX <= centerCellX + radius; cellX++) {
+                HydrologyMath.Node node = hydrology.node(cellX, cellZ);
+                HydrologyMath.Node downstream = hydrology.downstream(node);
+                if (downstream == null) {
+                    HydrologyMath.NodeInfo info = hydrology.nodeInfo(node);
+                    if (info.terminalReason() == HydrologyMath.TerminalReason.LAKE) {
+                        HydrologyMath.LakeProfile lake = hydrology.lakeProfile(node);
+                        recordCase(
+                            cases,
+                            lake.closedBasin() ? "closed_basin" : "open_lake_outlet",
+                            caseLine(node, info, downstream)
+                                + String.format(
+                                    Locale.ROOT,
+                                    " radius=%.2f lake_water_y=%.2f outlet=%d closed=%s",
+                                    lake.boundaryRadius(),
+                                    lake.waterSurfaceY(),
+                                    lake.outletId(),
+                                    lake.closedBasin()
+                                )
+                        );
+                    } else if (info.terminalReason()
+                        == HydrologyMath.TerminalReason.DETERMINISTIC_OVERFLOW_OUTLET) {
+                        recordCase(
+                            cases,
+                            "deterministic_overflow",
+                            caseLine(node, info, downstream)
+                        );
+                    } else if (info.terminalReason()
+                        == HydrologyMath.TerminalReason.OCEAN_OUTLET) {
+                        recordCase(
+                            cases,
+                            "ocean_outlet",
+                            caseLine(node, info, downstream)
+                        );
+                    }
+                }
+
+                int incoming = 0;
+                for (int dz = -1; dz <= 1; dz++) {
+                    for (int dx = -1; dx <= 1; dx++) {
+                        if (dx == 0 && dz == 0) {
+                            continue;
+                        }
+                        HydrologyMath.Node neighbour =
+                            hydrology.node(cellX + dx, cellZ + dz);
+                        HydrologyMath.Node neighbourTarget =
+                            hydrology.downstream(neighbour);
+                        if (neighbourTarget != null
+                            && neighbourTarget.id() == node.id()) {
+                            incoming++;
+                        }
+                    }
+                }
+                if (incoming >= 2) {
+                    recordCase(
+                        cases,
+                        "confluence",
+                        caseLine(node, hydrology.nodeInfo(node), downstream)
+                            + " incoming=" + incoming
+                    );
+                }
+                if (downstream != null
+                    && node.terrainY() >= 145.0
+                    && node.terrainY() - downstream.terrainY() >= 5.0) {
+                    recordCase(
+                        cases,
+                        "mountain_source",
+                        caseLine(node, hydrology.nodeInfo(node), downstream)
+                    );
+                }
+            }
+        }
+        StringBuilder report = new StringBuilder();
+        report.append(String.format(
+            Locale.ROOT,
+            "seed=%d%ncenter.x=%d%ncenter.z=%d%nradius.cells=%d%n",
+            level.getSeed(),
+            centerX,
+            centerZ,
+            radius
+        ));
+        for (String type : List.of(
+            "open_lake_outlet",
+            "closed_basin",
+            "deterministic_overflow",
+            "confluence",
+            "ocean_outlet",
+            "mountain_source"
+        )) {
+            report.append(String.format(Locale.ROOT, "%n[%s]%n", type));
+            List<String> found = cases.getOrDefault(type, List.of());
+            if (found.isEmpty()) {
+                report.append("none").append(System.lineSeparator());
+            } else {
+                found.forEach(line -> report.append(line).append(System.lineSeparator()));
+            }
+        }
+        return report.toString();
+    }
+
+    private static void recordCase(
+        Map<String, List<String>> cases,
+        String type,
+        String line
+    ) {
+        List<String> entries = cases.computeIfAbsent(
+            type,
+            ignored -> new ArrayList<>()
+        );
+        if (entries.size() < 3) {
+            entries.add(line);
+        }
+    }
+
+    private static String caseLine(
+        HydrologyMath.Node node,
+        HydrologyMath.NodeInfo info,
+        HydrologyMath.Node downstream
+    ) {
+        return String.format(
+            Locale.ROOT,
+            "x=%d z=%d cell_x=%d cell_z=%d node=%d downstream=%d basin=%d "
+                + "outlet=%d reason=%s order=%d accumulation=%d terrain_y=%.2f "
+                + "bed_y=%.2f water_y=%.2f",
+            (int)Math.round(node.x()),
+            (int)Math.round(node.z()),
+            node.cellX(),
+            node.cellZ(),
+            node.id(),
+            downstream == null ? HydrologyMath.NO_NODE : downstream.id(),
+            info.basinId(),
+            info.outletId(),
+            info.terminalReason(),
+            info.streamOrder(),
+            info.upstreamAccumulation(),
+            node.terrainY(),
+            node.bedY(),
+            node.waterY()
+        );
     }
 
     private static SurveyResult survey(ServerLevel level) {
@@ -155,6 +346,7 @@ public final class WorldgenSurvey {
         int[][] upliftColors = new int[size][size];
         int[][] terrainErrorColors = new int[size][size];
         int[][] terrainErrorClassColors = new int[size][size];
+        int[][] basinHydrologyColors = new int[size][size];
         Map<String, Integer> biomeCounts = new HashMap<>();
         Map<String, Integer> provinceCounts = new HashMap<>();
         Map<String, Integer> moodCounts = new HashMap<>();
@@ -209,6 +401,8 @@ public final class WorldgenSurvey {
                     regionalSampler.analyticalTerrain(worldX, worldZ);
                 HydrologyMath.Sample hydrology =
                     hydrologySampler.sample(worldX, worldZ);
+                HydrologyMath.BasinSample basin =
+                    hydrologySampler.basinSample(worldX, worldZ);
                 double terrainError = Math.abs(
                     analyticalTerrain.surfaceY() - actualWgY
                 );
@@ -252,6 +446,10 @@ public final class WorldgenSurvey {
                     new Color(207, 53, 48)
                 );
                 terrainErrorClassColors[imageZ][imageX] = errorClass.color;
+                basinHydrologyColors[imageZ][imageX] = basinAtlasColor(
+                    basin,
+                    hydrology
+                );
                 terrainErrors.add(terrainError);
                 terrainErrorClassCounts.merge(
                     errorClass.serializedName,
@@ -323,6 +521,7 @@ public final class WorldgenSurvey {
             upliftColors,
             terrainErrorColors,
             terrainErrorClassColors,
+            basinHydrologyColors,
             biomeCounts,
             provinceCounts,
             moodCounts,
@@ -504,6 +703,12 @@ public final class WorldgenSurvey {
         }
 
         int sampleCount = REGIONAL_ATLAS_SIZE * REGIONAL_ATLAS_SIZE;
+        NetworkDiagnostics network = surveyNetwork(
+            hydrology,
+            centerX,
+            centerZ,
+            halfSpan
+        );
         return new RegionalAtlasResult(
             provinceColors,
             moodColors,
@@ -520,6 +725,9 @@ public final class WorldgenSurvey {
             riverColors,
             riverOrderColors,
             waterLevelColors,
+            network.rawGraphColors(),
+            network.finalCenterlineColors(),
+            network.defectOverlayColors(),
             provinceCounts,
             moodCounts,
             rhythmCounts,
@@ -527,10 +735,410 @@ public final class WorldgenSurvey {
             upliftSum / sampleCount,
             dramatic * 100.0 / sampleCount,
             riverSamples * 100.0 / sampleCount,
+            network.metrics(),
             centerX,
             centerZ,
             halfSpan
         );
+    }
+
+    private static NetworkDiagnostics surveyNetwork(
+        NexusV2HydrologySampler hydrology,
+        int centerX,
+        int centerZ,
+        int halfSpan
+    ) {
+        int[][] raw = blankMap(new Color(18, 23, 29).getRGB());
+        int[][] warped = blankMap(new Color(18, 23, 29).getRGB());
+        int[][] defects = blankMap(new Color(18, 23, 29).getRGB());
+        int minCellX = Math.floorDiv(
+            centerX - halfSpan,
+            HydrologyMath.BASIN_SIZE
+        ) - 1;
+        int maxCellX = Math.floorDiv(
+            centerX + halfSpan,
+            HydrologyMath.BASIN_SIZE
+        ) + 1;
+        int minCellZ = Math.floorDiv(
+            centerZ - halfSpan,
+            HydrologyMath.BASIN_SIZE
+        ) - 1;
+        int maxCellZ = Math.floorDiv(
+            centerZ + halfSpan,
+            HydrologyMath.BASIN_SIZE
+        ) + 1;
+
+        List<NetworkSegment> segments = new ArrayList<>();
+        Map<Long, List<NetworkSegment>> incoming = new HashMap<>();
+        Map<Long, HydrologyMath.Node> nodes = new HashMap<>();
+        List<Double> lengths = new ArrayList<>();
+        double sinuositySum = 0.0;
+        long downhillChecks = 0;
+        long downhillAccepted = 0;
+        int shortBranches = 0;
+
+        for (int cellZ = minCellZ; cellZ <= maxCellZ; cellZ++) {
+            for (int cellX = minCellX; cellX <= maxCellX; cellX++) {
+                HydrologyMath.Node source = hydrology.node(cellX, cellZ);
+                HydrologyMath.Node target = hydrology.downstream(source);
+                nodes.put(source.id(), source);
+                if (target == null) {
+                    continue;
+                }
+                nodes.put(target.id(), target);
+                List<HydrologyMath.CenterlinePoint> points =
+                    hydrology.segmentPoints(source, target, 16);
+                double rawLength = Math.hypot(
+                    target.x() - source.x(),
+                    target.z() - source.z()
+                );
+                double warpedLength = 0.0;
+                double previousBed = Double.POSITIVE_INFINITY;
+                for (int index = 1; index < points.size(); index++) {
+                    HydrologyMath.CenterlinePoint previous = points.get(index - 1);
+                    HydrologyMath.CenterlinePoint point = points.get(index);
+                    warpedLength += Math.hypot(
+                        point.x() - previous.x(),
+                        point.z() - previous.z()
+                    );
+                }
+                for (HydrologyMath.CenterlinePoint point : points) {
+                    double physicalBed = hydrology.sample(
+                        (int)Math.round(point.x()),
+                        (int)Math.round(point.z())
+                    ).bedY();
+                    if (previousBed != Double.POSITIVE_INFINITY) {
+                        downhillChecks++;
+                        if (physicalBed <= previousBed + 0.25) {
+                            downhillAccepted++;
+                        }
+                    }
+                    previousBed = physicalBed;
+                }
+                NetworkSegment segment = new NetworkSegment(
+                    source,
+                    target,
+                    points,
+                    rawLength,
+                    warpedLength,
+                    warpedLength / Math.max(1.0, rawLength)
+                );
+                segments.add(segment);
+                incoming.computeIfAbsent(
+                    target.id(),
+                    ignored -> new ArrayList<>()
+                ).add(segment);
+                lengths.add(warpedLength);
+                sinuositySum += segment.sinuosity();
+                boolean shortBranch =
+                    warpedLength < HydrologyMath.BASIN_SIZE * 0.58;
+                if (shortBranch) {
+                    shortBranches++;
+                }
+                drawWorldLine(
+                    raw,
+                    source.x(),
+                    source.z(),
+                    target.x(),
+                    target.z(),
+                    centerX,
+                    centerZ,
+                    halfSpan,
+                    new Color(82, 116, 145).getRGB()
+                );
+                for (int index = 1; index < points.size(); index++) {
+                    HydrologyMath.CenterlinePoint previous = points.get(index - 1);
+                    HydrologyMath.CenterlinePoint point = points.get(index);
+                    drawWorldLine(
+                        warped,
+                        previous.x(),
+                        previous.z(),
+                        point.x(),
+                        point.z(),
+                        centerX,
+                        centerZ,
+                        halfSpan,
+                        new Color(55, 174, 221).getRGB()
+                    );
+                    if (shortBranch) {
+                        drawWorldLine(
+                            defects,
+                            previous.x(),
+                            previous.z(),
+                            point.x(),
+                            point.z(),
+                            centerX,
+                            centerZ,
+                            halfSpan,
+                            new Color(221, 67, 52).getRGB()
+                        );
+                    }
+                }
+            }
+        }
+
+        List<Double> angles = new ArrayList<>();
+        int rightAngles = 0;
+        int sinkStars = 0;
+        int trunkJunctions = 0;
+        int continuousTrunks = 0;
+        double confluenceAngleSum = 0.0;
+        int confluenceAngles = 0;
+        for (Map.Entry<Long, List<NetworkSegment>> entry : incoming.entrySet()) {
+            HydrologyMath.Node junction = nodes.get(entry.getKey());
+            if (junction == null) {
+                continue;
+            }
+            HydrologyMath.Node outgoing = hydrology.downstream(junction);
+            if (outgoing == null && entry.getValue().size() >= 4) {
+                sinkStars++;
+                drawWorldPoint(
+                    defects,
+                    junction.x(),
+                    junction.z(),
+                    centerX,
+                    centerZ,
+                    halfSpan,
+                    new Color(225, 55, 193).getRGB(),
+                    2
+                );
+            }
+            if (outgoing == null) {
+                continue;
+            }
+            trunkJunctions++;
+            double bestAngle = 180.0;
+            for (NetworkSegment incomingSegment : entry.getValue()) {
+                double angle = continuationAngle(
+                    incomingSegment.source(),
+                    junction,
+                    outgoing
+                );
+                angles.add(angle);
+                confluenceAngleSum += angle;
+                confluenceAngles++;
+                bestAngle = Math.min(bestAngle, angle);
+                if (angle >= 75.0 && angle <= 105.0) {
+                    rightAngles++;
+                    drawWorldPoint(
+                        defects,
+                        junction.x(),
+                        junction.z(),
+                        centerX,
+                        centerZ,
+                        halfSpan,
+                        new Color(242, 151, 48).getRGB(),
+                        1
+                    );
+                }
+            }
+            if (bestAngle <= 60.0) {
+                continuousTrunks++;
+            }
+        }
+
+        int parallelChannels = 0;
+        for (int first = 0; first < segments.size(); first++) {
+            NetworkSegment a = segments.get(first);
+            for (int second = first + 1; second < segments.size(); second++) {
+                NetworkSegment b = segments.get(second);
+                if (Math.abs(a.source().cellX() - b.source().cellX()) > 2
+                    || Math.abs(a.source().cellZ() - b.source().cellZ()) > 2
+                    || a.target().id() == b.target().id()) {
+                    continue;
+                }
+                double midpointDistance = Math.hypot(
+                    (a.source().x() + a.target().x()
+                        - b.source().x() - b.target().x()) * 0.5,
+                    (a.source().z() + a.target().z()
+                        - b.source().z() - b.target().z()) * 0.5
+                );
+                if (midpointDistance > HydrologyMath.BASIN_SIZE * 0.72) {
+                    continue;
+                }
+                double orientation = undirectedAngle(
+                    a.target().x() - a.source().x(),
+                    a.target().z() - a.source().z(),
+                    b.target().x() - b.source().x(),
+                    b.target().z() - b.source().z()
+                );
+                if (orientation <= 15.0) {
+                    parallelChannels++;
+                    drawWorldPoint(
+                        defects,
+                        (a.source().x() + a.target().x()) * 0.5,
+                        (a.source().z() + a.target().z()) * 0.5,
+                        centerX,
+                        centerZ,
+                        halfSpan,
+                        new Color(238, 223, 70).getRGB(),
+                        1
+                    );
+                }
+            }
+        }
+
+        lengths.sort(Double::compareTo);
+        angles.sort(Double::compareTo);
+        NetworkMetrics metrics = new NetworkMetrics(
+            segments.size(),
+            percentile(lengths, 0.10),
+            percentile(lengths, 0.50),
+            percentile(lengths, 0.90),
+            shortBranches,
+            percentile(angles, 0.10),
+            percentile(angles, 0.50),
+            percentile(angles, 0.90),
+            parallelChannels,
+            rightAngles,
+            sinkStars,
+            confluenceAngles == 0
+                ? 0.0
+                : confluenceAngleSum / confluenceAngles,
+            segments.isEmpty() ? 0.0 : sinuositySum / segments.size(),
+            trunkJunctions == 0
+                ? 0.0
+                : continuousTrunks * 100.0 / trunkJunctions,
+            downhillChecks == 0
+                ? 0.0
+                : downhillAccepted * 100.0 / downhillChecks
+        );
+        return new NetworkDiagnostics(raw, warped, defects, metrics);
+    }
+
+    private static int[][] blankMap(int color) {
+        int[][] result = new int[REGIONAL_ATLAS_SIZE][REGIONAL_ATLAS_SIZE];
+        for (int[] row : result) {
+            java.util.Arrays.fill(row, color);
+        }
+        return result;
+    }
+
+    private static void drawWorldLine(
+        int[][] colors,
+        double startX,
+        double startZ,
+        double endX,
+        double endZ,
+        int centerX,
+        int centerZ,
+        int halfSpan,
+        int color
+    ) {
+        int x0 = atlasCoordinate(startX, centerX, halfSpan);
+        int z0 = atlasCoordinate(startZ, centerZ, halfSpan);
+        int x1 = atlasCoordinate(endX, centerX, halfSpan);
+        int z1 = atlasCoordinate(endZ, centerZ, halfSpan);
+        int dx = Math.abs(x1 - x0);
+        int dz = Math.abs(z1 - z0);
+        int stepX = x0 < x1 ? 1 : -1;
+        int stepZ = z0 < z1 ? 1 : -1;
+        int error = dx - dz;
+        while (true) {
+            if (x0 >= 0 && x0 < REGIONAL_ATLAS_SIZE
+                && z0 >= 0 && z0 < REGIONAL_ATLAS_SIZE) {
+                colors[z0][x0] = color;
+            }
+            if (x0 == x1 && z0 == z1) {
+                break;
+            }
+            int doubled = error * 2;
+            if (doubled > -dz) {
+                error -= dz;
+                x0 += stepX;
+            }
+            if (doubled < dx) {
+                error += dx;
+                z0 += stepZ;
+            }
+        }
+    }
+
+    private static void drawWorldPoint(
+        int[][] colors,
+        double worldX,
+        double worldZ,
+        int centerX,
+        int centerZ,
+        int halfSpan,
+        int color,
+        int radius
+    ) {
+        int centerImageX = atlasCoordinate(worldX, centerX, halfSpan);
+        int centerImageZ = atlasCoordinate(worldZ, centerZ, halfSpan);
+        for (int dz = -radius; dz <= radius; dz++) {
+            for (int dx = -radius; dx <= radius; dx++) {
+                int x = centerImageX + dx;
+                int z = centerImageZ + dz;
+                if (x >= 0 && x < REGIONAL_ATLAS_SIZE
+                    && z >= 0 && z < REGIONAL_ATLAS_SIZE) {
+                    colors[z][x] = color;
+                }
+            }
+        }
+    }
+
+    private static int atlasCoordinate(
+        double coordinate,
+        int center,
+        int halfSpan
+    ) {
+        return (int)Math.round(
+            (coordinate - center + halfSpan)
+                * (REGIONAL_ATLAS_SIZE - 1)
+                / (halfSpan * 2.0)
+        );
+    }
+
+    private static double continuationAngle(
+        HydrologyMath.Node source,
+        HydrologyMath.Node junction,
+        HydrologyMath.Node target
+    ) {
+        return directedAngle(
+            junction.x() - source.x(),
+            junction.z() - source.z(),
+            target.x() - junction.x(),
+            target.z() - junction.z()
+        );
+    }
+
+    private static double directedAngle(
+        double firstX,
+        double firstZ,
+        double secondX,
+        double secondZ
+    ) {
+        double denominator = Math.max(
+            1.0E-9,
+            Math.hypot(firstX, firstZ) * Math.hypot(secondX, secondZ)
+        );
+        double cosine = Math.max(
+            -1.0,
+            Math.min(1.0, (firstX * secondX + firstZ * secondZ) / denominator)
+        );
+        return Math.toDegrees(Math.acos(cosine));
+    }
+
+    private static double undirectedAngle(
+        double firstX,
+        double firstZ,
+        double secondX,
+        double secondZ
+    ) {
+        double angle = directedAngle(firstX, firstZ, secondX, secondZ);
+        return Math.min(angle, 180.0 - angle);
+    }
+
+    private static double percentile(List<Double> sorted, double percentile) {
+        if (sorted.isEmpty()) {
+            return 0.0;
+        }
+        int index = Math.min(
+            sorted.size() - 1,
+            (int)Math.floor((sorted.size() - 1) * percentile)
+        );
+        return sorted.get(index);
     }
 
     private static BlockPos resolveSurveyCenter(ServerLevel level) {
@@ -817,6 +1425,35 @@ public final class WorldgenSurvey {
         return TerrainErrorClass.UNKNOWN;
     }
 
+    private static int basinAtlasColor(
+        HydrologyMath.BasinSample basin,
+        HydrologyMath.Sample river
+    ) {
+        if (basin.reason()
+            == HydrologyMath.TerminalReason.DETERMINISTIC_OVERFLOW_OUTLET
+            && basin.mask() > 0.15) {
+            return new Color(232, 132, 44).getRGB();
+        }
+        if (basin.reason() == HydrologyMath.TerminalReason.LAKE) {
+            if (basin.shorelineWeight() > 0.08) {
+                return new Color(222, 198, 126).getRGB();
+            }
+            if (basin.mask() > 0.02) {
+                return basin.closedBasin()
+                    ? new Color(66, 88, 161).getRGB()
+                    : new Color(44, 132, 205).getRGB();
+            }
+        }
+        if (river.mask() > 0.20) {
+            return switch (river.order()) {
+                case 3 -> new Color(31, 92, 190).getRGB();
+                case 2 -> new Color(54, 151, 210).getRGB();
+                default -> new Color(99, 193, 218).getRGB();
+            };
+        }
+        return new Color(34, 42, 37).getRGB();
+    }
+
     private static String terrainRegion(
         NexusV2FieldSampler sampler,
         RegionalFieldMath.Sample regional,
@@ -889,6 +1526,7 @@ public final class WorldgenSurvey {
         int[][] upliftColors,
         int[][] terrainErrorColors,
         int[][] terrainErrorClassColors,
+        int[][] basinHydrologyColors,
         Map<String, Integer> biomeCounts,
         Map<String, Integer> provinceCounts,
         Map<String, Integer> moodCounts,
@@ -1003,7 +1641,15 @@ public final class WorldgenSurvey {
                     + "support.random_breakthrough=%d%n"
                     + "basin.columns_attempted=%d%nlake.columns_carved=%d%n"
                     + "basin_water_blocks.placed=%d%n"
-                    + "shoreline.columns=%d%noverflow.columns_carved=%d%n",
+                    + "shoreline.columns=%d%noverflow.columns_carved=%d%n"
+                    + "lake.raised_columns=%d%n"
+                    + "lake.leaks_outside_mask=%d%n"
+                    + "basin.edge_support_accepted=%d%n"
+                    + "basin.edge_support_rejected=%d%n"
+                    + "lake.floating_water_columns=%d%n"
+                    + "lake.isolated_columns=%d%n"
+                    + "lake.water_level_mismatches=%d%n"
+                    + "lake.isolated_columns_rejected=%d%n",
                 riverCounters.channelsAttempted(),
                 riverCounters.channelsAccepted(),
                 riverCounters.blocksCarved(),
@@ -1025,7 +1671,15 @@ public final class WorldgenSurvey {
                 riverCounters.lakeColumnsCarved(),
                 riverCounters.basinWaterBlocksPlaced(),
                 riverCounters.shorelineColumns(),
-                riverCounters.overflowColumnsCarved()
+                riverCounters.overflowColumnsCarved(),
+                riverCounters.raisedLakeColumns(),
+                riverCounters.leaksOutsideBasinMask(),
+                riverCounters.edgeSupportAccepted(),
+                riverCounters.edgeSupportRejected(),
+                riverCounters.floatingWaterColumns(),
+                riverCounters.isolatedLakeColumns(),
+                riverCounters.basinWaterLevelMismatches(),
+                riverCounters.isolatedLakeColumnsRejected()
             ));
             report.append(String.format(Locale.ROOT, "%nfeatures.placed:%n"));
             FEATURE_COUNTS.entrySet().stream()
@@ -1072,6 +1726,9 @@ public final class WorldgenSurvey {
         int[][] riverColors,
         int[][] riverOrderColors,
         int[][] waterLevelColors,
+        int[][] rawDrainageGraphColors,
+        int[][] finalCenterlineColors,
+        int[][] defectOverlayColors,
         Map<String, Integer> provinceCounts,
         Map<String, Integer> moodCounts,
         Map<String, Integer> rhythmCounts,
@@ -1079,6 +1736,7 @@ public final class WorldgenSurvey {
         double meanMacroUplift,
         double dramaticPercent,
         double riverPercent,
+        NetworkMetrics networkMetrics,
         int centerX,
         int centerZ,
         int halfSpan
@@ -1114,6 +1772,33 @@ public final class WorldgenSurvey {
             appendCounts(report, "provinces", provinceCounts);
             appendCounts(report, "moods", moodCounts);
             appendCounts(report, "rhythm", rhythmCounts);
+            report.append(String.format(
+                Locale.ROOT,
+                "%nriver_network_metrics:%n"
+                    + "segments=%d%nsegment_length.p10=%.2f%n"
+                    + "segment_length.p50=%.2f%nsegment_length.p90=%.2f%n"
+                    + "short_branches=%d%nangle.p10=%.2f%n"
+                    + "angle.p50=%.2f%nangle.p90=%.2f%n"
+                    + "parallel_channels=%d%nright_angle_junctions=%d%n"
+                    + "sink_stars=%d%nconfluence_angle.mean=%.2f%n"
+                    + "sinuosity.mean=%.4f%ntrunk_continuity.percent=%.2f%n"
+                    + "centerline_monotonic_downhill.percent=%.2f%n",
+                networkMetrics.segmentCount(),
+                networkMetrics.segmentLengthP10(),
+                networkMetrics.segmentLengthP50(),
+                networkMetrics.segmentLengthP90(),
+                networkMetrics.shortBranches(),
+                networkMetrics.angleP10(),
+                networkMetrics.angleP50(),
+                networkMetrics.angleP90(),
+                networkMetrics.parallelChannels(),
+                networkMetrics.rightAngleJunctions(),
+                networkMetrics.sinkStars(),
+                networkMetrics.meanConfluenceAngle(),
+                networkMetrics.meanSinuosity(),
+                networkMetrics.trunkContinuityPercent(),
+                networkMetrics.monotonicDownhillPercent()
+            ));
             return report.toString();
         }
 
@@ -1132,5 +1817,42 @@ public final class WorldgenSurvey {
                     entry.getValue()
                 )));
         }
+    }
+
+    private record NetworkSegment(
+        HydrologyMath.Node source,
+        HydrologyMath.Node target,
+        List<HydrologyMath.CenterlinePoint> points,
+        double rawLength,
+        double warpedLength,
+        double sinuosity
+    ) {
+    }
+
+    private record NetworkDiagnostics(
+        int[][] rawGraphColors,
+        int[][] finalCenterlineColors,
+        int[][] defectOverlayColors,
+        NetworkMetrics metrics
+    ) {
+    }
+
+    private record NetworkMetrics(
+        int segmentCount,
+        double segmentLengthP10,
+        double segmentLengthP50,
+        double segmentLengthP90,
+        int shortBranches,
+        double angleP10,
+        double angleP50,
+        double angleP90,
+        int parallelChannels,
+        int rightAngleJunctions,
+        int sinkStars,
+        double meanConfluenceAngle,
+        double meanSinuosity,
+        double trunkContinuityPercent,
+        double monotonicDownhillPercent
+    ) {
     }
 }

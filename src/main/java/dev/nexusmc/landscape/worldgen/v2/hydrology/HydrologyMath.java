@@ -1,5 +1,8 @@
 package dev.nexusmc.landscape.worldgen.v2.hydrology;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * A canonical drainage graph made from jittered watershed nodes. Each node
  * selects exactly one lower neighbour, producing converging trees and local
@@ -190,6 +193,22 @@ public final class HydrologyMath {
         );
         double radius = 72.0 + selector * 156.0;
         double maxDepth = 4.0 + selector * 8.0;
+        double boundaryMinimum = Double.POSITIVE_INFINITY;
+        for (double ring : new double[] {0.96, 1.10}) {
+            for (int index = 0; index < 32; index++) {
+                double angle = index * Math.PI * 2.0 / 32.0;
+                double sampleX = node.x + Math.cos(angle) * radius * ring;
+                double sampleZ = node.z + Math.sin(angle) * radius * ring;
+                boundaryMinimum = Math.min(
+                    boundaryMinimum,
+                    noise.terrainY(sampleX, sampleZ)
+                );
+            }
+        }
+        double waterSurfaceY = Math.min(
+            node.waterY,
+            boundaryMinimum - 2.5
+        );
         boolean closed = mix64(node.id ^ 0xBB67AE8584CAA73BL) % 5L == 0L;
         Node outlet = closed ? null : overflowOutlet(node, noise);
         return new LakeProfile(
@@ -198,7 +217,7 @@ public final class HydrologyMath {
             node.z,
             radius,
             Math.PI * radius * radius,
-            node.waterY,
+            waterSurfaceY,
             maxDepth,
             upstreamAccumulation(node, noise, 5),
             outlet == null ? NO_NODE : outlet.id,
@@ -337,6 +356,25 @@ public final class HydrologyMath {
             }
         }
         return best;
+    }
+
+    public static List<CenterlinePoint> segmentPoints(
+        Node source,
+        Node target,
+        NoiseSource noise,
+        int subdivisions
+    ) {
+        Curve curve = curve(source, target, noise);
+        List<CenterlinePoint> points = new ArrayList<>(subdivisions + 1);
+        for (int index = 0; index <= subdivisions; index++) {
+            double t = index / (double)subdivisions;
+            points.add(new CenterlinePoint(
+                curveX(curve, t),
+                curveZ(curve, t),
+                lerp(source.bedY, target.bedY, t)
+            ));
+        }
+        return List.copyOf(points);
     }
 
     private static TerminalReason terminalReason(Node node, NoiseSource noise) {
@@ -603,6 +641,9 @@ public final class HydrologyMath {
             0.0,
             false
         );
+    }
+
+    public record CenterlinePoint(double x, double z, double bedY) {
     }
 
     public enum TerminalReason {

@@ -157,6 +157,7 @@ public final class RiverWaterPass {
         applyBasins(
             chunk,
             hydrology,
+            fields,
             telemetry,
             cursor,
             minX,
@@ -169,6 +170,7 @@ public final class RiverWaterPass {
     private static void applyBasins(
         ChunkAccess chunk,
         NexusV2HydrologySampler hydrology,
+        NexusV2FieldSampler fields,
         Telemetry telemetry,
         BlockPos.MutableBlockPos cursor,
         int minX,
@@ -187,18 +189,31 @@ public final class RiverWaterPass {
                 );
             }
         }
+        double[][] lakeWaterLevels = new double[16][16];
+        long[][] lakeBasinIds = new long[16][16];
+        HydrologyMath.BasinSample[][] interpolatedBasins =
+            new HydrologyMath.BasinSample[16][16];
+        for (int z = 0; z < 16; z++) {
+            java.util.Arrays.fill(lakeWaterLevels[z], Double.NaN);
+            java.util.Arrays.fill(lakeBasinIds[z], HydrologyMath.NO_NODE);
+            for (int x = 0; x < 16; x++) {
+                interpolatedBasins[z][x] = interpolateBasin(
+                    basinSamples,
+                    basinGrid,
+                    x,
+                    z
+                );
+            }
+        }
         for (int localZ = 0; localZ < 16; localZ++) {
             int z = minZ + localZ;
             for (int localX = 0; localX < 16; localX++) {
                 int x = minX + localX;
-                HydrologyMath.BasinSample basin = interpolateBasin(
-                    basinSamples,
-                    basinGrid,
-                    localX,
-                    localZ
-                );
+                HydrologyMath.BasinSample basin =
+                    interpolatedBasins[localZ][localX];
                 if (basin.reason() == HydrologyMath.TerminalReason.NONE
-                    || basin.mask() <= 0.02) {
+                    || (basin.mask() <= 0.02
+                        && basin.shorelineWeight() <= 0.02)) {
                     continue;
                 }
                 telemetry.basinColumnsAttempted.increment();
@@ -221,10 +236,30 @@ public final class RiverWaterPass {
                     basin.reason()
                         == HydrologyMath.TerminalReason.DETERMINISTIC_OVERFLOW_OUTLET
                     && basin.mask() >= 0.52;
+                if (lakeInterior && !hasLakeNeighbour(
+                    interpolatedBasins,
+                    hydrology,
+                    basin,
+                    localX,
+                    localZ,
+                    x,
+                    z
+                )) {
+                    telemetry.isolatedLakeColumnsRejected.increment();
+                    continue;
+                }
                 if (lakeInterior || overflow) {
                     bedY = Math.max(bedY, surfaceY - (lakeInterior ? 12 : 7));
-                    waterY = Math.max(bedY + 1, Math.min(waterY, surfaceY + 2));
-                    if (!basinSupportIsSafe(chunk, cursor, x, z, bedY)) {
+                    waterY = Math.max(bedY + 1, waterY);
+                    if (!basinSupportIsSafe(
+                        chunk,
+                        cursor,
+                        fields,
+                        x,
+                        z,
+                        bedY,
+                        telemetry
+                    )) {
                         telemetry.caveIntersection.increment();
                         continue;
                     }
@@ -241,6 +276,10 @@ public final class RiverWaterPass {
                     }
                     for (int y = bedY + 1; y <= waterY; y++) {
                         cursor.set(x, y, z);
+                        if (!chunk.getBlockState(cursor).isAir()
+                            && chunk.getFluidState(cursor).isEmpty()) {
+                            telemetry.blocksCarved.increment();
+                        }
                         chunk.setBlockState(
                             cursor,
                             Blocks.WATER.defaultBlockState(),
@@ -262,8 +301,21 @@ public final class RiverWaterPass {
                         telemetry.overflowColumnsCarved.increment();
                     } else {
                         telemetry.lakeColumnsCarved.increment();
+                        lakeWaterLevels[localZ][localX] = basin.waterY();
+                        lakeBasinIds[localZ][localX] = basin.basinId();
+                        if (waterY > surfaceY + 1) {
+                            telemetry.raisedLakeColumns.increment();
+                        }
+                        cursor.set(x, bedY, z);
+                        if (chunk.getBlockState(cursor).isAir()) {
+                            telemetry.floatingWaterColumns.increment();
+                        }
                     }
                 } else if (basin.shorelineWeight() > 0.08) {
+                    if (basin.waterY() >= surfaceY) {
+                        telemetry.leaksOutsideBasinMask.increment();
+                        continue;
+                    }
                     cursor.set(x, surfaceY, z);
                     chunk.setBlockState(
                         cursor,
@@ -277,6 +329,112 @@ public final class RiverWaterPass {
                 }
             }
         }
+        validateLakeColumnContinuity(
+            lakeWaterLevels,
+            lakeBasinIds,
+            telemetry
+        );
+    }
+
+    private static boolean hasLakeNeighbour(
+        HydrologyMath.BasinSample[][] basins,
+        NexusV2HydrologySampler hydrology,
+        HydrologyMath.BasinSample basin,
+        int localX,
+        int localZ,
+        int worldX,
+        int worldZ
+    ) {
+        int[][] offsets = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+        for (int[] offset : offsets) {
+            int neighbourX = localX + offset[0];
+            int neighbourZ = localZ + offset[1];
+            HydrologyMath.BasinSample neighbour;
+            if (neighbourX >= 0 && neighbourX < 16
+                && neighbourZ >= 0 && neighbourZ < 16) {
+                neighbour = basins[neighbourZ][neighbourX];
+            } else {
+                neighbour = hydrology.basinSample(
+                    worldX + offset[0],
+                    worldZ + offset[1]
+                );
+            }
+            if (neighbour.basinId() == basin.basinId()
+                && neighbour.reason() == HydrologyMath.TerminalReason.LAKE
+                && neighbour.radialDistance() <= 1.0
+                && neighbour.mask() > 0.02) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void validateLakeColumnContinuity(
+        double[][] waterLevels,
+        long[][] basinIds,
+        Telemetry telemetry
+    ) {
+        for (int z = 0; z < 16; z++) {
+            for (int x = 0; x < 16; x++) {
+                if (basinIds[z][x] == HydrologyMath.NO_NODE) {
+                    continue;
+                }
+                int connected = 0;
+                if (x > 0) {
+                    connected += compareLakeNeighbour(
+                        waterLevels,
+                        basinIds,
+                        x,
+                        z,
+                        x - 1,
+                        z,
+                        telemetry
+                    );
+                }
+                if (z > 0) {
+                    connected += compareLakeNeighbour(
+                        waterLevels,
+                        basinIds,
+                        x,
+                        z,
+                        x,
+                        z - 1,
+                        telemetry
+                    );
+                }
+                if (x + 1 < 16 && basinIds[z][x + 1] == basinIds[z][x]) {
+                    connected++;
+                }
+                if (z + 1 < 16 && basinIds[z + 1][x] == basinIds[z][x]) {
+                    connected++;
+                }
+                if (connected == 0
+                    && x > 0 && x < 15
+                    && z > 0 && z < 15) {
+                    telemetry.isolatedLakeColumns.increment();
+                }
+            }
+        }
+    }
+
+    private static int compareLakeNeighbour(
+        double[][] waterLevels,
+        long[][] basinIds,
+        int x,
+        int z,
+        int neighbourX,
+        int neighbourZ,
+        Telemetry telemetry
+    ) {
+        if (basinIds[neighbourZ][neighbourX] != basinIds[z][x]) {
+            return 0;
+        }
+        if (Math.abs(
+            waterLevels[neighbourZ][neighbourX] - waterLevels[z][x]
+        ) > 0.01) {
+            telemetry.basinWaterLevelMismatches.increment();
+        }
+        return 1;
     }
 
     private static HydrologyMath.BasinSample interpolateBasin(
@@ -355,15 +513,26 @@ public final class RiverWaterPass {
     private static boolean basinSupportIsSafe(
         ChunkAccess chunk,
         BlockPos.MutableBlockPos cursor,
+        NexusV2FieldSampler fields,
         int x,
         int z,
-        int bedY
+        int bedY,
+        Telemetry telemetry
     ) {
         for (int dz = -1; dz <= 1; dz++) {
             for (int dx = -1; dx <= 1; dx++) {
                 int supportX = x + dx;
                 int supportZ = z + dz;
                 if (!inside(chunk, supportX, supportZ)) {
+                    double analyticalSupport = fields.analyticalTerrain(
+                        supportX,
+                        supportZ
+                    ).surfaceY();
+                    if (analyticalSupport < bedY + 4.0) {
+                        telemetry.edgeSupportRejected.increment();
+                        return false;
+                    }
+                    telemetry.edgeSupportAccepted.increment();
                     continue;
                 }
                 for (int depth = 1; depth <= 4; depth++) {
@@ -782,6 +951,14 @@ public final class RiverWaterPass {
         private final LongAdder basinWaterBlocks = new LongAdder();
         private final LongAdder shorelineColumns = new LongAdder();
         private final LongAdder overflowColumnsCarved = new LongAdder();
+        private final LongAdder raisedLakeColumns = new LongAdder();
+        private final LongAdder leaksOutsideBasinMask = new LongAdder();
+        private final LongAdder edgeSupportAccepted = new LongAdder();
+        private final LongAdder edgeSupportRejected = new LongAdder();
+        private final LongAdder floatingWaterColumns = new LongAdder();
+        private final LongAdder isolatedLakeColumns = new LongAdder();
+        private final LongAdder basinWaterLevelMismatches = new LongAdder();
+        private final LongAdder isolatedLakeColumnsRejected = new LongAdder();
 
         void record(CaveSupport support) {
             switch (support) {
@@ -817,7 +994,15 @@ public final class RiverWaterPass {
                 lakeColumnsCarved.sum(),
                 basinWaterBlocks.sum(),
                 shorelineColumns.sum(),
-                overflowColumnsCarved.sum()
+                overflowColumnsCarved.sum(),
+                raisedLakeColumns.sum(),
+                leaksOutsideBasinMask.sum(),
+                edgeSupportAccepted.sum(),
+                edgeSupportRejected.sum(),
+                floatingWaterColumns.sum(),
+                isolatedLakeColumns.sum(),
+                basinWaterLevelMismatches.sum(),
+                isolatedLakeColumnsRejected.sum()
             );
         }
     }
@@ -844,11 +1029,19 @@ public final class RiverWaterPass {
         long lakeColumnsCarved,
         long basinWaterBlocksPlaced,
         long shorelineColumns,
-        long overflowColumnsCarved
+        long overflowColumnsCarved,
+        long raisedLakeColumns,
+        long leaksOutsideBasinMask,
+        long edgeSupportAccepted,
+        long edgeSupportRejected,
+        long floatingWaterColumns,
+        long isolatedLakeColumns,
+        long basinWaterLevelMismatches,
+        long isolatedLakeColumnsRejected
     ) {
         private static final Counters EMPTY = new Counters(
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
         );
     }
 }

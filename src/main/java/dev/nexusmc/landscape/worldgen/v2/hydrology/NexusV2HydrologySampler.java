@@ -16,6 +16,7 @@ public final class NexusV2HydrologySampler {
     private final NormalNoise tributary;
     private final NormalNoise elevation;
     private final Map<Long, Double> terrainYCache = new HashMap<>();
+    private final HydrologyMath.NoiseSource source;
 
     public NexusV2HydrologySampler(RandomState randomState) {
         this.terrain =
@@ -23,17 +24,47 @@ public final class NexusV2HydrologySampler {
         this.layout = randomState.getOrCreateNoise(NexusV2Noises.HYDROLOGY_LAYOUT);
         this.tributary = randomState.getOrCreateNoise(NexusV2Noises.HYDROLOGY_TRIBUTARY);
         this.elevation = randomState.getOrCreateNoise(NexusV2Noises.HYDROLOGY_ELEVATION);
+        this.source = createNoiseSource();
     }
 
     public HydrologyMath.Sample sample(int blockX, int blockZ) {
-        return HydrologyMath.sample(blockX, blockZ, noiseSource());
+        return HydrologyMath.sample(blockX, blockZ, source);
     }
 
     public HydrologyMath.BasinSample basinSample(int blockX, int blockZ) {
-        return HydrologyMath.basinSample(blockX, blockZ, noiseSource());
+        return HydrologyMath.basinSample(blockX, blockZ, source);
     }
 
-    private HydrologyMath.NoiseSource noiseSource() {
+    public HydrologyMath.Node node(int cellX, int cellZ) {
+        return HydrologyMath.node(cellX, cellZ, source);
+    }
+
+    public HydrologyMath.Node downstream(HydrologyMath.Node node) {
+        return HydrologyMath.downstream(node, source);
+    }
+
+    public HydrologyMath.NodeInfo nodeInfo(HydrologyMath.Node node) {
+        return HydrologyMath.nodeInfo(node, source);
+    }
+
+    public HydrologyMath.LakeProfile lakeProfile(HydrologyMath.Node node) {
+        return HydrologyMath.lakeProfile(node, source);
+    }
+
+    public java.util.List<HydrologyMath.CenterlinePoint> segmentPoints(
+        HydrologyMath.Node sourceNode,
+        HydrologyMath.Node targetNode,
+        int subdivisions
+    ) {
+        return HydrologyMath.segmentPoints(
+            sourceNode,
+            targetNode,
+            source,
+            subdivisions
+        );
+    }
+
+    private HydrologyMath.NoiseSource createNoiseSource() {
         return new HydrologyMath.NoiseSource() {
             @Override
             public double layout(double x, double z) {
