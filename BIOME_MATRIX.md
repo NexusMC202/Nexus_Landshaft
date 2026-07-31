@@ -454,6 +454,18 @@ Geological province должен выбираться раньше биома. �
 
 Эти значения должны обновляться только после тестов и визуального отчёта.
 
+### Runtime follow-up 2026-07-31
+
+- все `53/53` vanilla surface и vegetation profiles остаются подключены;
+- все восемь dominant surface zones имеют ненулевой runtime evidence;
+- Nature’s Spirit `2.2.5` загружен с TerraBlender, найдено 48 biome keys;
+- физически проверены `natures_spirit:coniferous_covert`,
+  `natures_spirit:alpine_clearings` и `natures_spirit:boreal_taiga`;
+- optional rows используют climate-aware fallback, а не обязательную
+  compile-time зависимость;
+- визуально принятых строк по-прежнему `0/53`, поскольку F3 screenshots
+  отсутствуют.
+
 ## 10. Acceptance для отдельной строки
 
 Строка переводится из `SPEC` в `IMPLEMENTED`, только если:

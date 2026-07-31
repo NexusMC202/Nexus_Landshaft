@@ -84,3 +84,82 @@ high enough to show the transition, then capture F3:
 For every scene capture overview, ground close-up, boundary between profiles,
 and F3 with seed/coordinates. These images are still required before visual
 acceptance.
+
+## 2026-07-31 performance and zone follow-up
+
+Все записи ниже получены на физически созданных chunks, а не только pure
+resolver tests.
+
+| Seed | Coordinates | Biome / terrain | Dominant runtime zone | Surface / vegetation counters | Screenshot | Result / defects |
+|---:|---|---|---|---|---|---|
+| `918273645` | `18704,-6564` | birch/grove, old highland | base `36,452`; wet bank `3,484` | 39,936 columns; 139,215 blocks; 8/146 trees | BLOCKED | исправлен ложный coast `36,452→0`; `Done=62.002s` |
+| `240802` | `-16384,-32768` | jagged/frozen peaks, river corridor | channel `30,157`, base `6,707` | 36,864 columns; 77,878 blocks; river tree rejects 119 | BLOCKED | channel envelope был слишком широк; dominant channel переведён на canonical mask |
+| `240802` | `-13312,-30720` | meadow/forest lowland | wet bank `5,849`; slope `134`; base `30,881` | 115,922 blocks; 4/133 trees; 40 cave blocks | BLOCKED | dripstone profile 4,359; impossible counters 0 |
+| `240802` | `-25600,-32768` | snowy slopes near coast | coast `36,653`; wet bank `211` | 116,657 blocks; 0/123 trees | BLOCKED | coast runtime confirmed; client view required |
+| `240802` | `-10240,-32768` | glacial massif | alpine `36,864` | 105,794 blocks; 5/122 trees | BLOCKED | alpine runtime confirmed; visual treeline pending |
+| `-41027` | `46080,37376` | taiga, volcanic influence 0.52 | volcanic `28,111`; base `8,753` | 118,348 blocks; 30/125 trees; 1 cave block | BLOCKED | volcanic normalization fixed and confirmed |
+| `240802` | `-18024,-34970` | plains/river/forest lake | lake `34,982`; wet bank `893`; base `7,389` | 43,264 columns; 208,721 blocks; 6/164 trees | BLOCKED | lake final run, all impossible counters 0 |
+
+Агрегированное покрытие:
+
+```text
+surface.zone.river > 0
+surface.zone.lake = 34982
+surface.zone.wet_bank = 5849 (отдельный target)
+surface.zone.coast = 36653
+surface.zone.volcanic = 28111
+surface.zone.alpine = 36864
+surface.zone.slope = 134
+surface.zone.base = 36452 (highland target)
+```
+
+Суммировать эти значения как один run нельзя: telemetry намеренно
+snapshot/reset между target worlds.
+
+## Vegetation explanation
+
+Старая метрика `tree_attempts=18` обозначала только дошедшие до placement
+попытки и была неоднозначной. Новая telemetry считает полный pipeline:
+
+- lake: 164 candidates, 6 placed, 6 water rejects, 13 river rejects, 124
+  density rejects, 15 other;
+- wet-bank/slope: 133 candidates, 4 placed, 125 density rejects;
+- volcanic: 125 candidates, 30 placed, 77 density rejects, 18 other;
+- river target: 124 candidates, 119 river rejects, 0 placed.
+
+Также отдельно считаются ground attempts/placed и province membership:
+dense forest, woodland, clearing, open valley, wet lowland, rocky slope,
+alpine и coastal.
+
+## Cave runtime
+
+Физически встречены:
+
+- lush profile: 430 probes на volcanic target;
+- dripstone profile: 4,359 probes и до 40 changed blocks на wet-bank target;
+- deep dark: 9,413 probes на river target;
+- generic modded underground fallback: 13,061 probes и 3 changed blocks с
+  Nature’s Spirit.
+
+Наземная grammar не применяется к cave profiles. Cave candidate X/Z и
+вертикальный offset теперь seed-jittered, чтобы не образовывать регулярную
+chunk grid. Визуальный cave QA остаётся `BLOCKED`.
+
+## Nature’s Spirit runtime
+
+Проверена версия `2.2.5-1.21.1` вместе с TerraBlender `4.1.0.8`,
+Architectury `13.0.8` и Cloth Config `15.0.140`.
+
+- dedicated server и свежий мир дошли до `Done (30.684s)`;
+- ClassNotFoundException и registry errors отсутствуют;
+- biome-source scan нашёл 48 `natures_spirit:*` keys;
+- физически сгенерированы `coniferous_covert` (750 samples),
+  `alpine_clearings` (149) и `boreal_taiga` (71);
+- one-time fallback logs также подтверждены для `maple_woodlands` и
+  `aspen_forest`;
+- выбор профиля: generic climate-aware fallback;
+- physical result: 36,864 columns, 110,250 changed surface blocks, 88 ground
+  accents, 13,061 generic cave probes.
+
+Nature’s Spirit остаётся необязательным: предыдущие vanilla-only fresh worlds
+запускались без этих JAR.

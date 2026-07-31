@@ -297,16 +297,26 @@ public final class VegetationProvincePass {
         int minX = chunk.getPos().getMinBlockX();
         int minZ = chunk.getPos().getMinBlockZ();
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
-        for (int localZ : new int[] {3, 11}) {
-            for (int localX : new int[] {3, 11}) {
-                int x = minX + localX;
-                int z = minZ + localZ;
-                telemetry.caveColumns.increment();
-                int topY = Math.min(
-                    96,
-                    level.getHeight(Heightmap.Types.OCEAN_FLOOR_WG, x, z) - 8
-                );
-                for (int y = level.getMinBuildHeight() + 8; y <= topY; y += 4) {
+        for (int candidate = 0; candidate < 4; candidate++) {
+            int x = minX + 2 + (int)Math.floor(
+                unit(seed, chunk.getPos().x, chunk.getPos().z,
+                    0xCA7E00L + candidate * 2L) * 12.0
+            );
+            int z = minZ + 2 + (int)Math.floor(
+                unit(seed, chunk.getPos().x, chunk.getPos().z,
+                    0xCA7E01L + candidate * 2L) * 12.0
+            );
+            telemetry.caveColumns.increment();
+            int topY = Math.min(
+                96,
+                level.getHeight(Heightmap.Types.OCEAN_FLOOR_WG, x, z) - 8
+            );
+            int verticalOffset = (int)Math.floor(
+                unit(seed, x, z, 0xCA7E5L) * 4.0
+            );
+            for (int y = level.getMinBuildHeight() + 8 + verticalOffset;
+                 y <= topY;
+                 y += 4) {
                     cursor.set(x, y, z);
                     String biomeId = level.getBiome(cursor).unwrapKey()
                         .map(key -> key.location().toString())
@@ -346,7 +356,6 @@ public final class VegetationProvincePass {
                         telemetry.caves.increment();
                     }
                 }
-            }
         }
         Stage6Profiler.record(Stage6Profiler.Phase.CAVE_ACCENTS, caveStarted);
     }
@@ -451,10 +460,11 @@ public final class VegetationProvincePass {
 
     private static Province classifyProvince(Sample sample) {
         SurfaceContext surface = sample.context().surface();
-        if (surface.coastWeight() > 0.34) {
+        if (surface.coastWeight() > 0.34 && surface.surfaceY() <= 104) {
             return Province.COASTAL;
         }
-        if (surface.surfaceY() > sample.profile().treeLineY() - 20) {
+        if (surface.alpineExposure()
+            || surface.surfaceY() > sample.profile().treeLineY() - 20) {
             return Province.ALPINE;
         }
         if (surface.slope() > 0.58) {

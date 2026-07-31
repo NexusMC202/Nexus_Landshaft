@@ -15,16 +15,16 @@ NeoForge: `21.1.235`
 | Physical surface blocks | IMPLEMENTED | `SurfaceProvincePass` вызывается из `buildSurface` |
 | River/lake final authority | IMPLEMENTED | `RiverWaterPass` вызывается после surface pass |
 | Smooth coordinate blending | IMPLEMENTED | `SurfaceNoise`, smooth influence masks |
-| Unknown/modded biome fallback | PARTIALLY IMPLEMENTED | climate-aware fallback; runtime Nature’s Spirit instance ещё не проверен |
+| Unknown/modded biome fallback | IMPLEMENTED | без мода и с Nature’s Spirit 2.2.5; 48 keys найдены, три NS biome физически сгенерированы |
 | Vegetation profiles | IMPLEMENTED | 53/53 immutable profiles; `VegetationProvincePass` вызывается после biome decoration |
 | Cave biome material pass | PARTIALLY IMPLEMENTED | terrestrial surface исключает 3D cave biome leakage; ограниченные cave accents подключены, но geometry Stage 7 не начиналась |
-| Runtime survey | PARTIALLY IMPLEMENTED | три fresh seed дошли до `Done`; counters и targeted reports получены, но полное scene coverage отсутствует |
+| Runtime survey | IMPLEMENTED | все восемь dominant surface zones имеют ненулевые runtime counters |
 | Runtime diagnostics commands | IMPLEMENTED | read-only `biome_audit`; CSV `survey` отключён по умолчанию и dev-gated |
-| Performance/cache bounds | PARTIALLY IMPLEMENTED | hydrology caches ограничены и протестированы; seed 918273645 занял 105.720 s |
+| Performance/cache bounds | IMPLEMENTED | aggregate profiler; context bottleneck исправлен grid-интерполяцией; Nexus surface 42.331→7.611 s |
 | F3 screenshots | BLOCKED BY RUNTIME UI | dedicated-server smoke не создаёт клиентские screenshots |
 
-Ни одна строка выше не означает завершение Stage 6: vegetation и cave runtime
-integration остаются обязательными.
+Stage 6 остаётся `PARTIAL`: shader-free visual acceptance и доказательство
+отсутствия видимых chunk seams заблокированы отсутствием управляемого клиента.
 
 ## 1. Проверенная цепочка генерации
 

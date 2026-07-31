@@ -14,11 +14,11 @@ public final class SurfaceProfileResolver {
     ) {
         SurfaceProfile.Layers layers = profile.layers();
         double river = smoothstep(
-            0.16,
-            0.62,
-            Math.max(context.riverMask(), context.riverInfluence())
+            0.42,
+            0.78,
+            context.riverMask()
         );
-        if (accept(river, context.localNoise())) {
+        if (context.activeChannel() || accept(river, context.localNoise())) {
             return selection(
                 profile,
                 SurfaceSelection.Zone.CHANNEL,
@@ -72,7 +72,7 @@ public final class SurfaceProfileResolver {
                 Math.min(5, profile.soilDepth() + 1)
             );
         }
-        double volcanic = smoothstep(0.44, 0.78, context.volcanicWeight());
+        double volcanic = smoothstep(0.30, 0.68, context.volcanicWeight());
         if (accept(volcanic, context.localNoise())) {
             return selection(
                 profile,
@@ -100,7 +100,9 @@ public final class SurfaceProfileResolver {
                 Math.max(1, profile.soilDepth() - 1)
             );
         }
-        double exposed = smoothstep(0.28, 0.72, context.slope());
+        // Runtime slope is normalized from a two-block analytical gradient.
+        // Values above ~0.10 already represent visibly steep Minecraft faces.
+        double exposed = smoothstep(0.08, 0.30, context.slope());
         if (accept(exposed, context.localNoise())) {
             return selection(
                 profile,

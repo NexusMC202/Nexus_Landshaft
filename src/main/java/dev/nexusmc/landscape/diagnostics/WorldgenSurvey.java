@@ -7,6 +7,12 @@ import dev.nexusmc.landscape.worldgen.v2.hydrology.HydrologyMath;
 import dev.nexusmc.landscape.worldgen.v2.hydrology.NexusV2HydrologySampler;
 import dev.nexusmc.landscape.worldgen.v2.hydrology.RiverWaterPass;
 import dev.nexusmc.landscape.worldgen.v2.surface.SurfaceProvincePass;
+import dev.nexusmc.landscape.worldgen.v2.surface.SurfaceContext;
+import dev.nexusmc.landscape.worldgen.v2.surface.SurfaceContextFactory;
+import dev.nexusmc.landscape.worldgen.v2.surface.SurfaceProfile;
+import dev.nexusmc.landscape.worldgen.v2.surface.SurfaceProfileCatalog;
+import dev.nexusmc.landscape.worldgen.v2.surface.SurfaceProfileResolver;
+import dev.nexusmc.landscape.worldgen.v2.surface.SurfaceSelection;
 import dev.nexusmc.landscape.worldgen.v2.vegetation.VegetationProvincePass;
 import java.awt.Color;
 import java.awt.Graphics2D;
@@ -94,6 +100,28 @@ public final class WorldgenSurvey {
                 );
                 LOGGER.info(
                     "Nexus hydrology case scan complete: {}",
+                    output.toAbsolutePath().normalize()
+                );
+                return;
+            }
+            if ("1".equals(System.getenv("NEXUS_LANDSCAPE_STAGE6_ZONE_SCAN_ONLY"))) {
+                Files.writeString(
+                    output.resolve("stage6-zone-cases.txt"),
+                    findStage6ZoneCases(server.overworld())
+                );
+                LOGGER.info(
+                    "Nexus Stage 6 zone scan complete: {}",
+                    output.toAbsolutePath().normalize()
+                );
+                return;
+            }
+            if ("1".equals(System.getenv("NEXUS_LANDSCAPE_MODDED_SCAN_ONLY"))) {
+                Files.writeString(
+                    output.resolve("stage6-modded-biomes.txt"),
+                    findModdedBiomes(server.overworld())
+                );
+                LOGGER.info(
+                    "Nexus Stage 6 modded-biome scan complete: {}",
                     output.toAbsolutePath().normalize()
                 );
                 return;
@@ -192,6 +220,198 @@ public final class WorldgenSurvey {
         } finally {
             server.halt(false);
         }
+    }
+
+    private static String findModdedBiomes(ServerLevel level) {
+        Map<String, String> found = new java.util.TreeMap<>();
+        int radius = environmentInteger(
+            "NEXUS_LANDSCAPE_MODDED_SCAN_RADIUS",
+            65_536
+        );
+        int step = environmentInteger(
+            "NEXUS_LANDSCAPE_MODDED_SCAN_STEP",
+            256
+        );
+        int y = environmentInteger("NEXUS_LANDSCAPE_MODDED_SCAN_Y", 80);
+        var biomeSource = level.getChunkSource().getGenerator().getBiomeSource();
+        var sampler = level.getChunkSource().randomState().sampler();
+        for (int z = -radius; z <= radius; z += step) {
+            for (int x = -radius; x <= radius; x += step) {
+                String key = biomeSource.getNoiseBiome(
+                    QuartPos.fromBlock(x),
+                    QuartPos.fromBlock(y),
+                    QuartPos.fromBlock(z),
+                    sampler
+                ).unwrapKey().map(value -> value.location().toString())
+                    .orElse("nexus_landscape:unknown");
+                if (!key.startsWith("minecraft:")) {
+                    found.putIfAbsent(
+                        key,
+                        "x=" + x + " y=" + y + " z=" + z
+                    );
+                }
+            }
+        }
+        StringBuilder output = new StringBuilder();
+        output.append("seed=").append(level.getSeed()).append('\n');
+        output.append("modded.biomes=").append(found.size()).append('\n');
+        found.forEach((key, coordinates) -> output.append(key)
+            .append(' ').append(coordinates).append('\n'));
+        return output.toString();
+    }
+
+    private static String findStage6ZoneCases(ServerLevel level) {
+        NexusV2FieldSampler fields =
+            new NexusV2FieldSampler(level.getChunkSource().randomState());
+        NexusV2HydrologySampler hydrology =
+            new NexusV2HydrologySampler(level.getChunkSource().randomState());
+        Map<SurfaceSelection.Zone, List<String>> cases =
+            new java.util.EnumMap<>(SurfaceSelection.Zone.class);
+        int centerX = surveyCenter("NEXUS_LANDSCAPE_SURVEY_CENTER_X");
+        int centerZ = surveyCenter("NEXUS_LANDSCAPE_SURVEY_CENTER_Z");
+        int radius = environmentInteger(
+            "NEXUS_LANDSCAPE_STAGE6_ZONE_SCAN_RADIUS",
+            32_768
+        );
+        int step = environmentInteger(
+            "NEXUS_LANDSCAPE_STAGE6_ZONE_SCAN_STEP",
+            1_024
+        );
+        for (int z = centerZ - radius; z <= centerZ + radius; z += step) {
+            for (int x = centerX - radius; x <= centerX + radius; x += step) {
+                NexusV2FieldSampler.SurfaceInputs input =
+                    fields.surfaceInputs(x, z);
+                RegionalFieldMath.Sample regional =
+                    SurfaceContextFactory.regional(input);
+                double surfaceY = fields.analyticalTerrain(x, z).surfaceY();
+                double dx = fields.analyticalTerrain(x + 1, z).surfaceY()
+                    - fields.analyticalTerrain(x - 1, z).surfaceY();
+                double dz = fields.analyticalTerrain(x, z + 1).surfaceY()
+                    - fields.analyticalTerrain(x, z - 1).surfaceY();
+                double slope = Math.min(
+                    1.0,
+                    Math.sqrt(dx * dx + dz * dz) / 16.0
+                );
+                HydrologyMath.Sample river = hydrology.sample(x, z);
+                HydrologyMath.BasinSample basin = hydrology.basinSample(x, z);
+                SurfaceContext context = SurfaceContextFactory.create(
+                    level.getSeed(),
+                    x,
+                    z,
+                    (int)Math.round(surfaceY),
+                    "nexus_landscape:scan",
+                    input,
+                    regional,
+                    river,
+                    basin,
+                    slope
+                );
+                SurfaceProfile profile = SurfaceProfileCatalog.fallback(
+                    input.temperature(),
+                    input.humidity(),
+                    false
+                );
+                SurfaceSelection selection =
+                    SurfaceProfileResolver.resolve(profile, context);
+                List<String> zoneCases = cases.computeIfAbsent(
+                    selection.zone(),
+                    ignored -> new ArrayList<>()
+                );
+                if (zoneCases.size() < 3) {
+                    zoneCases.add(String.format(
+                        Locale.ROOT,
+                        "x=%d z=%d y=%d province=%s weight=%.4f "
+                            + "river=%.4f distance=%.2f lake=%.4f coast=%.4f "
+                            + "volcanic=%.4f alpine=%.4f slope=%.4f",
+                        x,
+                        z,
+                        context.surfaceY(),
+                        context.terrainProvince(),
+                        selection.zoneWeight(),
+                        context.riverInfluence(),
+                        context.riverDistance(),
+                        context.lakeBasinMask(),
+                        context.coastWeight(),
+                        context.volcanicWeight(),
+                        context.alpineInfluence(),
+                        context.slope()
+                    ));
+                }
+            }
+        }
+        List<String> volcanicCandidates = new ArrayList<>();
+        List<String> slopeCandidates = new ArrayList<>();
+        int denseStep = Math.max(128, step / 4);
+        for (int z = centerZ - radius;
+             z <= centerZ + radius
+                 && (volcanicCandidates.size() < 3
+                     || slopeCandidates.size() < 3);
+             z += denseStep) {
+            for (int x = centerX - radius;
+                 x <= centerX + radius
+                     && (volcanicCandidates.size() < 3
+                         || slopeCandidates.size() < 3);
+                 x += denseStep) {
+                NexusV2FieldSampler.SurfaceInputs input =
+                    fields.surfaceInputs(x, z);
+                RegionalFieldMath.Sample regional =
+                    SurfaceContextFactory.regional(input);
+                double volcanic = Math.max(
+                    regional.provinceWeight(
+                        RegionalFieldMath.Province.VOLCANIC_BELT
+                    ),
+                    SurfaceContextFactory.channel(
+                        input,
+                        RegionalFieldMath.Channel.VOLCANIC_MOUNTAINS
+                    )
+                );
+                double dx = fields.analyticalTerrain(x + 1, z).surfaceY()
+                    - fields.analyticalTerrain(x - 1, z).surfaceY();
+                double dz = fields.analyticalTerrain(x, z + 1).surfaceY()
+                    - fields.analyticalTerrain(x, z - 1).surfaceY();
+                double slope = Math.min(
+                    1.0,
+                    Math.sqrt(dx * dx + dz * dz) / 16.0
+                );
+                if (volcanic > 0.48 && volcanicCandidates.size() < 3) {
+                    volcanicCandidates.add(String.format(
+                        Locale.ROOT,
+                        "x=%d z=%d volcanic=%.4f province=%s",
+                        x,
+                        z,
+                        volcanic,
+                        regional.dominantProvince().serializedName()
+                    ));
+                }
+                if (slope > 0.14 && slopeCandidates.size() < 3) {
+                    slopeCandidates.add(String.format(
+                        Locale.ROOT,
+                        "x=%d z=%d slope=%.4f province=%s",
+                        x,
+                        z,
+                        slope,
+                        regional.dominantProvince().serializedName()
+                    ));
+                }
+            }
+        }
+        StringBuilder output = new StringBuilder();
+        output.append("seed=").append(level.getSeed()).append('\n');
+        for (SurfaceSelection.Zone zone : SurfaceSelection.Zone.values()) {
+            output.append('\n').append(zone.name().toLowerCase(Locale.ROOT))
+                .append(":\n");
+            List<String> zoneCases = cases.getOrDefault(zone, List.of());
+            if (zoneCases.isEmpty()) {
+                output.append("not_found\n");
+            } else {
+                zoneCases.forEach(line -> output.append(line).append('\n'));
+            }
+        }
+        output.append("\nvolcanic_dense_candidates:\n");
+        volcanicCandidates.forEach(line -> output.append(line).append('\n'));
+        output.append("\nslope_dense_candidates:\n");
+        slopeCandidates.forEach(line -> output.append(line).append('\n'));
+        return output.toString();
     }
 
     private static String findHydrologyCases(ServerLevel level) {

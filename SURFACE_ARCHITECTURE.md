@@ -80,8 +80,12 @@ Nature’s Spirit не импортируется и не является за�
 
 ## Ограничения текущей итерации
 
-- наземная vegetation grammar ещё не подключена;
-- отдельный cave-material pass ещё не подключён;
-- runtime palette counters и timing telemetry ещё не экспортируются;
-- первый fresh-world smoke seed 240802 дошёл до server `Done`, но survey hook
-  после старта не сформировал отчёт и требует исправления.
+- `HydrologyChunkGrid` вычисляет 6×6 опорных Stage 5 samples на surface chunk и
+  интерполирует только непрерывные influence-поля. Discrete IDs/order/reason
+  берутся от ближайшей canonical sample.
+- Точная физическая гидрология не интерполируется: `RiverWaterPass` остаётся
+  последним authority.
+- `Stage6Profiler` агрегирует phase timings только при survey/profile flag.
+- Runtime assertions считают невозможные dominant combinations.
+- Все восемь зон получили ненулевые runtime counters; визуальная приёмка
+  остаётся заблокированной.

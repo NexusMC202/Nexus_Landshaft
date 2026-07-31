@@ -64,10 +64,17 @@ Trees получают smooth reduction:
 
 - 16 ground candidates;
 - приблизительно 1–4 owned tree candidates;
-- 12 ограниченных cave probes;
+- 4 seed-jittered cave columns с вертикальным шагом 4;
 - biome/context lookup только на candidates, не на каждый block;
 - registry IDs ground palette разрешаются один раз в immutable map.
 
-Известное ограничение: vanilla tree placement пока не получает Nexus slope
-predicate. Survey должен измерить итоговую, а не только Nexus-added, tree
-density на cliffs и в river center.
+Telemetry отдельно считает attempts, placed, slope/water/river/altitude/density
+rejections, ground attempts/placed и восемь vegetation provinces. Cave
+telemetry разделяет lush, dripstone, deep-dark и generic fallback.
+
+Известные ограничения:
+
+- vanilla tree placement пока не получает Nexus slope predicate;
+- итоговая смесь vanilla+Nexus визуально не принята;
+- Nature’s Spirit использует безопасный climate-aware fallback, а не 48
+  отдельных hardcoded Java profiles.

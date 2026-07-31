@@ -162,6 +162,11 @@ public final class SurfaceProfileSelfTest {
             ).zone() != SurfaceSelection.Zone.COAST,
             "broad coast field painted a highland"
         );
+        requireZone(
+            profile,
+            context(0.0, 0.0, 0.0, 0.0, 82.0, 0.20),
+            SurfaceSelection.Zone.EXPOSED_SLOPE
+        );
         requireZone(profile, context(0.0, 0.0, 0.0, 0.0, 220.0, 0.8),
             SurfaceSelection.Zone.ALPINE);
         requireZone(profile, context(0.0, 0.0, 0.0, 0.0, 80.0, 0.8),
