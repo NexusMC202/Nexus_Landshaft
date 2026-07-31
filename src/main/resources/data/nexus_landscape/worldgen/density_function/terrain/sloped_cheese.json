@@ -1,0 +1,13 @@
+{
+  "type": "minecraft:add",
+  "argument1": {
+    "type": "minecraft:add",
+    "argument1": "minecraft:overworld/sloped_cheese",
+    "argument2": {
+      "type": "minecraft:add",
+      "argument1": "nexus_landscape:terrain/regional_uplift",
+      "argument2": "nexus_landscape:terrain/archipelago_uplift"
+    }
+  },
+  "argument2": "nexus_landscape:terrain/river_valleys"
+}

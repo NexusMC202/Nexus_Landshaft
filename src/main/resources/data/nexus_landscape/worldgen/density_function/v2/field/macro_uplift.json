@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:flat_cache",
+  "argument": {
+    "type": "nexus_landscape:regional_field",
+    "channel": "macro_uplift",
+    "continentalness": "nexus_landscape:v2/continent/base",
+    "temperature": "nexus_landscape:climate_temperature",
+    "humidity": "nexus_landscape:climate_humidity",
+    "warp_x": "nexus_landscape:v2/province_warp_x",
+    "warp_z": "nexus_landscape:v2/province_warp_z",
+    "macro": "nexus_landscape:v2/province_macro",
+    "detail": "nexus_landscape:v2/province_detail",
+    "ridge": "nexus_landscape:v2/province_ridge",
+    "volcanic": "nexus_landscape:v2/volcanic_arc",
+    "composition": "nexus_landscape:v2/composition"
+  }
+}

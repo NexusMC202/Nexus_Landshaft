@@ -1,0 +1,6 @@
+{
+  "type": "neoforge:add_features",
+  "biomes": "#nexus_landscape:has_deep_dark_rifts",
+  "features": "nexus_landscape:deep_dark_rift",
+  "step": "underground_decoration"
+}

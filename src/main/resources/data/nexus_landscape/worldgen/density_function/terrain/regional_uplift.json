@@ -1,0 +1,5 @@
+{
+  "type": "minecraft:add",
+  "argument1": "nexus_landscape:terrain/rolling_hills",
+  "argument2": "nexus_landscape:terrain/mountain_uplift"
+}

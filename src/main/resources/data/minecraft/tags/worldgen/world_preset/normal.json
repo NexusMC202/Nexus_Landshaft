@@ -1,0 +1,7 @@
+{
+  "replace": false,
+  "values": [
+    "nexus_landscape:nexus",
+    "nexus_landscape:nexus_v2"
+  ]
+}

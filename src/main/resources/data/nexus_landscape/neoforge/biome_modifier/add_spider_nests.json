@@ -1,0 +1,6 @@
+{
+  "type": "neoforge:add_features",
+  "biomes": "#nexus_landscape:has_spider_nests",
+  "features": "nexus_landscape:spider_nest",
+  "step": "underground_decoration"
+}

@@ -1,0 +1,44 @@
+name: build-and-worldgen-tests
+
+on:
+  push:
+    branches: ["main", "agent/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Prepare Gradle wrapper
+        run: chmod +x gradlew
+
+      - name: Validate JSON resources
+        shell: python
+        run: |
+          import json
+          from pathlib import Path
+
+          files = list(Path("src/main/resources").rglob("*.json"))
+          for path in files:
+              with path.open("r", encoding="utf-8") as stream:
+                  json.load(stream)
+          print(f"Validated {len(files)} JSON resources")
+
+      - name: Clean build and deterministic worldgen tests
+        run: ./gradlew clean build --stacktrace

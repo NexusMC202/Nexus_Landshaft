@@ -1,0 +1,22 @@
+{
+  "type": "minecraft:clamp",
+  "input": {
+    "type": "minecraft:add",
+    "argument1": "nexus_landscape:tectonic/biome_parameter/erosion",
+    "argument2": {
+      "type": "minecraft:mul",
+      "argument1": 0.5,
+      "argument2": {
+        "type": "minecraft:shifted_noise",
+        "noise": "nexus_landscape:biome_erosion_variation",
+        "shift_x": "minecraft:shift_x",
+        "shift_y": 0.0,
+        "shift_z": "minecraft:shift_z",
+        "xz_scale": 0.7,
+        "y_scale": 0.0
+      }
+    }
+  },
+  "min": -1.0,
+  "max": 1.0
+}

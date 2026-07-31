@@ -1,0 +1,6 @@
+{
+  "type": "neoforge:add_features",
+  "biomes": "#nexus_landscape:mycelial_reaches",
+  "features": "nexus_landscape:mycelial_grove",
+  "step": "vegetal_decoration"
+}

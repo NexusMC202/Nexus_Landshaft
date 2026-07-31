@@ -1,0 +1,5 @@
+{
+  "type": "minecraft:add",
+  "argument1": "nexus_landscape:v2/continent/base",
+  "argument2": 0.0
+}

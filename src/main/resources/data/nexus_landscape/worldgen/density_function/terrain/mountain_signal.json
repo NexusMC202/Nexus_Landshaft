@@ -1,0 +1,5 @@
+{
+  "type": "minecraft:mul",
+  "argument1": "nexus_landscape:terrain/mountain_region_mask",
+  "argument2": "nexus_landscape:terrain/mountain_ridges"
+}

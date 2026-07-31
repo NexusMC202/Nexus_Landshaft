@@ -1,0 +1,6 @@
+{
+  "type": "neoforge:add_features",
+  "biomes": "#nexus_landscape:has_rare_flower_grottos",
+  "features": "nexus_landscape:rare_flower_grotto",
+  "step": "underground_decoration"
+}

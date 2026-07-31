@@ -1,0 +1,6 @@
+{
+  "type": "neoforge:add_features",
+  "biomes": "#nexus_landscape:has_river_banks",
+  "features": "nexus_landscape:river_bank",
+  "step": "local_modifications"
+}

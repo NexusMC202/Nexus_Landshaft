@@ -1,0 +1,6 @@
+{
+  "type": "neoforge:add_features",
+  "biomes": "#nexus_landscape:volcanic_provinces",
+  "features": "nexus_landscape:volcanic_caldera",
+  "step": "local_modifications"
+}

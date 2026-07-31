@@ -1,0 +1,34 @@
+seed=240802
+center.x=0
+center.z=0
+radius.cells=64
+
+[open_lake_outlet]
+x=12776 z=-48829 cell_x=16 cell_z=-64 node=73014443968 downstream=-9223372036854775808 basin=73014443968 outlet=68719476673 reason=LAKE order=1 accumulation=6 terrain_y=68.17 bed_y=64.17 water_y=65.67 radius=139.18 lake_water_y=62.44 outlet=68719476673 closed=false
+x=-30359 z=-48018 cell_x=-40 cell_z=-63 node=-167503724607 downstream=-9223372036854775808 basin=-167503724607 outlet=-163208757312 reason=LAKE order=1 accumulation=4 terrain_y=71.29 bed_y=67.04 water_y=68.54 radius=125.45 lake_water_y=64.38 outlet=-163208757312 closed=false
+x=-21836 z=-48034 cell_x=-29 cell_z=-63 node=-120259084351 downstream=-9223372036854775808 basin=-120259084351 outlet=-120259084350 reason=LAKE order=1 accumulation=2 terrain_y=71.15 bed_y=67.02 water_y=68.52 radius=142.86 lake_water_y=66.20 outlet=-120259084350 closed=false
+
+[closed_basin]
+x=14275 z=-48857 cell_x=18 cell_z=-64 node=81604378560 downstream=-9223372036854775808 basin=81604378560 outlet=81604378560 reason=LAKE order=1 accumulation=3 terrain_y=73.30 bed_y=69.30 water_y=70.80 radius=151.19 lake_water_y=68.61 outlet=-9223372036854775808 closed=true
+x=-43451 z=-48000 cell_x=-57 cell_z=-63 node=-240518168639 downstream=-9223372036854775808 basin=-240518168639 outlet=-240518168639 reason=LAKE order=1 accumulation=6 terrain_y=64.87 bed_y=60.85 water_y=62.35 radius=133.72 lake_water_y=62.35 outlet=-9223372036854775808 closed=true
+x=-23420 z=-47991 cell_x=-31 cell_z=-63 node=-128849018943 downstream=-9223372036854775808 basin=-128849018943 outlet=-128849018943 reason=LAKE order=1 accumulation=7 terrain_y=69.58 bed_y=65.26 water_y=66.76 radius=147.58 lake_water_y=61.30 outlet=-9223372036854775808 closed=true
+
+[deterministic_overflow]
+x=-34183 z=-48943 cell_x=-45 cell_z=-64 node=-188978561088 downstream=-9223372036854775808 basin=-188978561088 outlet=-184683593791 reason=DETERMINISTIC_OVERFLOW_OUTLET order=1 accumulation=2 terrain_y=71.70 bed_y=67.70 water_y=69.20
+x=11977 z=-48766 cell_x=15 cell_z=-64 node=68719476672 downstream=-9223372036854775808 basin=68719476672 outlet=73014443968 reason=DETERMINISTIC_OVERFLOW_OUTLET order=2 accumulation=9 terrain_y=68.06 bed_y=64.06 water_y=65.56
+x=28060 z=-48747 cell_x=36 cell_z=-64 node=158913789888 downstream=-9223372036854775808 basin=158913789888 outlet=154618822593 reason=DETERMINISTIC_OVERFLOW_OUTLET order=1 accumulation=3 terrain_y=93.25 bed_y=89.25 water_y=90.75
+
+[confluence]
+x=-47193 z=-48792 cell_x=-62 cell_z=-64 node=-261993005120 downstream=-266287972415 basin=-266287972415 outlet=-266287972415 reason=NONE order=2 accumulation=13 terrain_y=54.99 bed_y=50.99 water_y=52.49 incoming=2
+x=390 z=-48945 cell_x=0 cell_z=-64 node=4294967232 downstream=4294967233 basin=4294967234 outlet=4294967234 reason=NONE order=2 accumulation=12 terrain_y=52.98 bed_y=48.98 water_y=50.48 incoming=2
+x=11977 z=-48766 cell_x=15 cell_z=-64 node=68719476672 downstream=-9223372036854775808 basin=68719476672 outlet=73014443968 reason=DETERMINISTIC_OVERFLOW_OUTLET order=2 accumulation=9 terrain_y=68.06 bed_y=64.06 water_y=65.56 incoming=2
+
+[ocean_outlet]
+x=-32588 z=-48942 cell_x=-43 cell_z=-64 node=-180388626496 downstream=-9223372036854775808 basin=-180388626496 outlet=-180388626496 reason=OCEAN_OUTLET order=1 accumulation=14 terrain_y=61.41 bed_y=57.41 water_y=58.91
+x=38857 z=-48862 cell_x=50 cell_z=-64 node=219043332032 downstream=-9223372036854775808 basin=219043332032 outlet=219043332032 reason=OCEAN_OUTLET order=2 accumulation=12 terrain_y=19.81 bed_y=15.59 water_y=17.09
+x=48011 z=-48773 cell_x=62 cell_z=-64 node=270582939584 downstream=-9223372036854775808 basin=270582939584 outlet=270582939584 reason=OCEAN_OUTLET order=2 accumulation=17 terrain_y=27.07 bed_y=22.79 water_y=24.29
+
+[mountain_source]
+x=-27204 z=-524 cell_x=-36 cell_z=-1 node=-150323855361 downstream=-146028888066 basin=-146028888071 outlet=-146028888071 reason=NONE order=2 accumulation=1 terrain_y=152.32 bed_y=148.12 water_y=149.62
+x=-27220 z=241 cell_x=-36 cell_z=0 node=-154618822656 downstream=-158913789951 basin=-167503724543 outlet=-171798691838 reason=NONE order=2 accumulation=1 terrain_y=162.27 bed_y=158.03 water_y=159.53
+x=-26425 z=239 cell_x=-35 cell_z=0 node=-150323855360 downstream=-146028888064 basin=-133143986173 outlet=-137438953469 reason=NONE order=2 accumulation=1 terrain_y=149.49 bed_y=145.47 water_y=146.97

@@ -1,0 +1,6 @@
+{
+  "type": "neoforge:add_features",
+  "biomes": "#nexus_landscape:humid_karst_region",
+  "features": "nexus_landscape:humid_karst_arch",
+  "step": "local_modifications"
+}
