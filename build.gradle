@@ -84,6 +84,15 @@ tasks.register('stage6VegetationTest', JavaExec) {
     mainClass = 'dev.nexusmc.landscape.worldgen.v2.vegetation.VegetationProfileSelfTest'
 }
 
+tasks.register('stage6CommandTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks Stage 6 debug command registration and permission policy.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.command.Stage6CommandPolicySelfTest'
+}
+
 tasks.named('check') {
-    dependsOn regionalFieldTest, stage6SurfaceTest, stage6VegetationTest
+    dependsOn regionalFieldTest, stage6SurfaceTest, stage6VegetationTest,
+        stage6CommandTest
 }

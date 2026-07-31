@@ -160,36 +160,52 @@ public final class SurfaceProvincePass {
     }
 
     public static String snapshotAndReset(RandomState randomState) {
+        return snapshot(randomState, true);
+    }
+
+    public static String snapshot(RandomState randomState) {
+        return snapshot(randomState, false);
+    }
+
+    public static void reset(RandomState randomState) {
+        snapshot(randomState, true);
+    }
+
+    private static String snapshot(RandomState randomState, boolean reset) {
         Telemetry telemetry = telemetry(randomState);
         StringBuilder result = new StringBuilder();
-        result.append("surface.columns=").append(telemetry.columns.sumThenReset())
+        result.append("surface.columns=").append(value(telemetry.columns, reset))
             .append('\n');
         result.append("surface.blocks_changed=")
-            .append(telemetry.blocks.sumThenReset()).append('\n');
+            .append(value(telemetry.blocks, reset)).append('\n');
         for (SurfaceSelection.Zone zone : SurfaceSelection.Zone.values()) {
             result.append("surface.zone.")
                 .append(zone.name().toLowerCase(java.util.Locale.ROOT))
                 .append('=')
-                .append(telemetry.zones[zone.ordinal()].sumThenReset())
+                .append(value(telemetry.zones[zone.ordinal()], reset))
                 .append('\n');
         }
         result.append("surface.zone.river=")
-            .append(telemetry.aliasRiver.sumThenReset()).append('\n');
+            .append(value(telemetry.aliasRiver, reset)).append('\n');
         result.append("surface.zone.lake=")
-            .append(telemetry.aliasLake.sumThenReset()).append('\n');
+            .append(value(telemetry.aliasLake, reset)).append('\n');
         result.append("surface.zone.slope=")
-            .append(telemetry.aliasSlope.sumThenReset()).append('\n');
+            .append(value(telemetry.aliasSlope, reset)).append('\n');
         result.append("surface.invalid.river_coast_dominance=")
-            .append(telemetry.invalidRiverCoast.sumThenReset()).append('\n');
+            .append(value(telemetry.invalidRiverCoast, reset)).append('\n');
         result.append("surface.invalid.alpine_low_altitude=")
-            .append(telemetry.invalidAlpineLow.sumThenReset()).append('\n');
+            .append(value(telemetry.invalidAlpineLow, reset)).append('\n');
         result.append("surface.invalid.wet_bank_far_from_water=")
-            .append(telemetry.invalidWetBankFar.sumThenReset()).append('\n');
+            .append(value(telemetry.invalidWetBankFar, reset)).append('\n');
         result.append("surface.invalid.lake_shore_on_channel=")
-            .append(telemetry.invalidLakeOnChannel.sumThenReset()).append('\n');
+            .append(value(telemetry.invalidLakeOnChannel, reset)).append('\n');
         result.append("surface.invalid.processing_below_minimum=")
-            .append(telemetry.invalidBelowMinimum.sumThenReset()).append('\n');
+            .append(value(telemetry.invalidBelowMinimum, reset)).append('\n');
         return result.toString();
+    }
+
+    private static long value(LongAdder counter, boolean reset) {
+        return reset ? counter.sumThenReset() : counter.sum();
     }
 
     private static void validateDominantZone(

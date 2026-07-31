@@ -75,26 +75,42 @@ public final class VegetationProvincePass {
     }
 
     public static String snapshotAndReset(RandomState randomState) {
+        return snapshot(randomState, true);
+    }
+
+    public static String snapshot(RandomState randomState) {
+        return snapshot(randomState, false);
+    }
+
+    public static void reset(RandomState randomState) {
+        snapshot(randomState, true);
+    }
+
+    private static String snapshot(RandomState randomState, boolean reset) {
         Telemetry telemetry = telemetry(randomState);
-        return "vegetation.chunks=" + telemetry.chunks.sumThenReset() + '\n'
-            + "vegetation.ground_attempts=" + telemetry.groundAttempts.sumThenReset() + '\n'
-            + "vegetation.ground_placed=" + telemetry.ground.sumThenReset() + '\n'
-            + "vegetation.rock_blocks=" + telemetry.rocks.sumThenReset() + '\n'
-            + "vegetation.tree_attempts=" + telemetry.treeAttempts.sumThenReset() + '\n'
-            + "vegetation.tree_placed=" + telemetry.trees.sumThenReset() + '\n'
-            + "vegetation.tree_rejected_slope=" + telemetry.treeRejectedSlope.sumThenReset() + '\n'
-            + "vegetation.tree_rejected_water=" + telemetry.treeRejectedWater.sumThenReset() + '\n'
-            + "vegetation.tree_rejected_river=" + telemetry.treeRejectedRiver.sumThenReset() + '\n'
-            + "vegetation.tree_rejected_altitude=" + telemetry.treeRejectedAltitude.sumThenReset() + '\n'
-            + "vegetation.tree_rejected_density=" + telemetry.treeRejectedDensity.sumThenReset() + '\n'
-            + "vegetation.tree_rejected_other=" + telemetry.treeRejectedOther.sumThenReset() + '\n'
-            + provinceSnapshot(telemetry)
-            + "cave.columns_or_sections_processed=" + telemetry.caveColumns.sumThenReset() + '\n'
-            + "cave.blocks_changed=" + telemetry.caves.sumThenReset() + '\n'
-            + "cave.profile.lush=" + telemetry.caveLush.sumThenReset() + '\n'
-            + "cave.profile.dripstone=" + telemetry.caveDripstone.sumThenReset() + '\n'
-            + "cave.profile.deep_dark=" + telemetry.caveDeepDark.sumThenReset() + '\n'
-            + "cave.profile.generic=" + telemetry.caveGeneric.sumThenReset() + '\n';
+        return "vegetation.chunks=" + value(telemetry.chunks, reset) + '\n'
+            + "vegetation.ground_attempts=" + value(telemetry.groundAttempts, reset) + '\n'
+            + "vegetation.ground_placed=" + value(telemetry.ground, reset) + '\n'
+            + "vegetation.rock_blocks=" + value(telemetry.rocks, reset) + '\n'
+            + "vegetation.tree_attempts=" + value(telemetry.treeAttempts, reset) + '\n'
+            + "vegetation.tree_placed=" + value(telemetry.trees, reset) + '\n'
+            + "vegetation.tree_rejected_slope=" + value(telemetry.treeRejectedSlope, reset) + '\n'
+            + "vegetation.tree_rejected_water=" + value(telemetry.treeRejectedWater, reset) + '\n'
+            + "vegetation.tree_rejected_river=" + value(telemetry.treeRejectedRiver, reset) + '\n'
+            + "vegetation.tree_rejected_altitude=" + value(telemetry.treeRejectedAltitude, reset) + '\n'
+            + "vegetation.tree_rejected_density=" + value(telemetry.treeRejectedDensity, reset) + '\n'
+            + "vegetation.tree_rejected_other=" + value(telemetry.treeRejectedOther, reset) + '\n'
+            + provinceSnapshot(telemetry, reset)
+            + "cave.columns_or_sections_processed=" + value(telemetry.caveColumns, reset) + '\n'
+            + "cave.blocks_changed=" + value(telemetry.caves, reset) + '\n'
+            + "cave.profile.lush=" + value(telemetry.caveLush, reset) + '\n'
+            + "cave.profile.dripstone=" + value(telemetry.caveDripstone, reset) + '\n'
+            + "cave.profile.deep_dark=" + value(telemetry.caveDeepDark, reset) + '\n'
+            + "cave.profile.generic=" + value(telemetry.caveGeneric, reset) + '\n';
+    }
+
+    private static long value(LongAdder counter, boolean reset) {
+        return reset ? counter.sumThenReset() : counter.sum();
     }
 
     private static void decorateGround(
@@ -486,13 +502,13 @@ public final class VegetationProvincePass {
         return Province.OPEN_VALLEY;
     }
 
-    private static String provinceSnapshot(Telemetry telemetry) {
+    private static String provinceSnapshot(Telemetry telemetry, boolean reset) {
         StringBuilder output = new StringBuilder();
         for (Province province : Province.values()) {
             output.append("vegetation.province.")
                 .append(province.name().toLowerCase(java.util.Locale.ROOT))
                 .append('=')
-                .append(telemetry.provinces[province.ordinal()].sumThenReset())
+                .append(value(telemetry.provinces[province.ordinal()], reset))
                 .append('\n');
         }
         return output.toString();

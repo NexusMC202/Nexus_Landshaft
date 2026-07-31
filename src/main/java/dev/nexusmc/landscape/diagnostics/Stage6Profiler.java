@@ -41,9 +41,21 @@ public final class Stage6Profiler {
     }
 
     public static String snapshotAndReset() {
+        return snapshot(true);
+    }
+
+    public static String snapshot() {
+        return snapshot(false);
+    }
+
+    public static void reset() {
+        snapshot(true);
+    }
+
+    private static String snapshot(boolean reset) {
         StringBuilder output = new StringBuilder();
         for (Phase phase : Phase.values()) {
-            Snapshot snapshot = MEASUREMENTS[phase.ordinal()].snapshotAndReset();
+            Snapshot snapshot = MEASUREMENTS[phase.ordinal()].snapshot(reset);
             String key = phase.name().toLowerCase(Locale.ROOT);
             output.append("profile.").append(key).append(".calls=")
                 .append(snapshot.calls()).append('\n');
@@ -105,13 +117,15 @@ public final class Stage6Profiler {
             histogram[bucket].increment();
         }
 
-        private Snapshot snapshotAndReset() {
-            long count = calls.sumThenReset();
-            long total = totalNanos.sumThenReset();
-            long maximum = maximumNanos.getAndSet(0L);
+        private Snapshot snapshot(boolean reset) {
+            long count = reset ? calls.sumThenReset() : calls.sum();
+            long total = reset ? totalNanos.sumThenReset() : totalNanos.sum();
+            long maximum = reset ? maximumNanos.getAndSet(0L) : maximumNanos.get();
             long[] buckets = new long[BUCKETS];
             for (int index = 0; index < buckets.length; index++) {
-                buckets[index] = histogram[index].sumThenReset();
+                buckets[index] = reset
+                    ? histogram[index].sumThenReset()
+                    : histogram[index].sum();
             }
             return new Snapshot(
                 count,
