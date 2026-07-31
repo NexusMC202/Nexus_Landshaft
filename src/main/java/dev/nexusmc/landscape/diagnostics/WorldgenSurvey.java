@@ -136,6 +136,26 @@ public final class WorldgenSurvey {
                     output.toAbsolutePath().normalize());
                 return;
             }
+            if ("1".equals(System.getenv("NEXUS_LANDSCAPE_COMMAND_SMOKE"))) {
+                var source = server.createCommandSourceStack();
+                server.getCommands().performPrefixedCommand(
+                    source, "nexuslandscape debug counters"
+                );
+                server.getCommands().performPrefixedCommand(
+                    source, "nexuslandscape debug reset"
+                );
+                server.getCommands().performPrefixedCommand(
+                    source, "nexuslandscape debug export"
+                );
+                Files.writeString(
+                    output.resolve("stage6-command-smoke.txt"),
+                    "permission=console_level_4\n"
+                        + "counters=invoked\n"
+                        + "reset=invoked\n"
+                        + "export=invoked\n"
+                );
+                return;
+            }
             RiverWaterPass.snapshotAndReset(
                 server.overworld().getChunkSource().randomState()
             );
