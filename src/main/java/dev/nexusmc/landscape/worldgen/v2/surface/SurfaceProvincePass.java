@@ -15,6 +15,7 @@ import java.util.Set;
 import java.util.Collections;
 import java.util.WeakHashMap;
 import java.util.concurrent.atomic.LongAdder;
+import java.util.concurrent.atomic.AtomicLong;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -154,6 +155,10 @@ public final class SurfaceProvincePass {
                 telemetry.columns.increment();
                 telemetry.blocks.add(changed);
                 telemetry.zones[selection.zone().ordinal()].increment();
+                telemetry.firstZones[selection.zone().ordinal()].compareAndSet(
+                    Long.MIN_VALUE,
+                    BlockPos.asLong(worldX, surfaceY, worldZ)
+                );
                 validateDominantZone(context, selection, telemetry);
             }
         }
@@ -184,6 +189,11 @@ public final class SurfaceProvincePass {
                 .append('=')
                 .append(value(telemetry.zones[zone.ordinal()], reset))
                 .append('\n');
+            result.append("surface.zone.")
+                .append(zone.name().toLowerCase(java.util.Locale.ROOT))
+                .append(".first=")
+                .append(position(telemetry.firstZones[zone.ordinal()], reset))
+                .append('\n');
         }
         result.append("surface.zone.river=")
             .append(value(telemetry.aliasRiver, reset)).append('\n');
@@ -206,6 +216,17 @@ public final class SurfaceProvincePass {
 
     private static long value(LongAdder counter, boolean reset) {
         return reset ? counter.sumThenReset() : counter.sum();
+    }
+
+    private static String position(AtomicLong coordinate, boolean reset) {
+        long packed = reset
+            ? coordinate.getAndSet(Long.MIN_VALUE)
+            : coordinate.get();
+        if (packed == Long.MIN_VALUE) {
+            return "none";
+        }
+        return BlockPos.getX(packed) + "," + BlockPos.getY(packed) + ","
+            + BlockPos.getZ(packed);
     }
 
     private static void validateDominantZone(
@@ -444,6 +465,8 @@ public final class SurfaceProvincePass {
         private final LongAdder blocks = new LongAdder();
         private final LongAdder[] zones =
             new LongAdder[SurfaceSelection.Zone.values().length];
+        private final AtomicLong[] firstZones =
+            new AtomicLong[SurfaceSelection.Zone.values().length];
         private final LongAdder aliasRiver = new LongAdder();
         private final LongAdder aliasLake = new LongAdder();
         private final LongAdder aliasSlope = new LongAdder();
@@ -456,6 +479,7 @@ public final class SurfaceProvincePass {
         private Telemetry() {
             for (int index = 0; index < zones.length; index++) {
                 zones[index] = new LongAdder();
+                firstZones[index] = new AtomicLong(Long.MIN_VALUE);
             }
         }
     }

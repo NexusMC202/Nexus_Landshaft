@@ -167,6 +167,10 @@ public final class SurfaceProfileSelfTest {
             context(0.0, 0.0, 0.0, 0.0, 82.0, 0.20),
             SurfaceSelection.Zone.EXPOSED_SLOPE
         );
+        require(
+            context(0.0, 0.0, 0.0, 0.0, 82.0, 0.20).exposedSlope(),
+            "runtime-calibrated exposed slope predicate is unreachable"
+        );
         requireZone(profile, context(0.0, 0.0, 0.0, 0.0, 220.0, 0.8),
             SurfaceSelection.Zone.ALPINE);
         requireZone(profile, context(0.0, 0.0, 0.0, 0.0, 80.0, 0.8),

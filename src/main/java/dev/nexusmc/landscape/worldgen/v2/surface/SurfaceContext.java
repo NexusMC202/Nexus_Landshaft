@@ -79,7 +79,7 @@ public record SurfaceContext(
     }
 
     public boolean exposedSlope() {
-        return slope >= 0.42;
+        return slope >= 0.16;
     }
 
     public boolean alpineExposure() {

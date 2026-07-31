@@ -14,6 +14,7 @@ import dev.nexusmc.landscape.worldgen.v2.surface.SurfaceProfileCatalog;
 import dev.nexusmc.landscape.worldgen.v2.surface.SurfaceProfileResolver;
 import dev.nexusmc.landscape.worldgen.v2.surface.SurfaceSelection;
 import dev.nexusmc.landscape.worldgen.v2.vegetation.VegetationProvincePass;
+import dev.nexusmc.landscape.worldgen.v2.vegetation.VegetationProfileCatalog;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
@@ -126,6 +127,15 @@ public final class WorldgenSurvey {
                 );
                 return;
             }
+            if ("1".equals(System.getenv("NEXUS_LANDSCAPE_QA_POINT_SCAN_ONLY"))) {
+                Files.writeString(
+                    output.resolve("stage6-qa-points.txt"),
+                    describeRequestedQaPoints(server.overworld())
+                );
+                LOGGER.info("Nexus Stage 6 QA point scan complete: {}",
+                    output.toAbsolutePath().normalize());
+                return;
+            }
             RiverWaterPass.snapshotAndReset(
                 server.overworld().getChunkSource().randomState()
             );
@@ -156,13 +166,19 @@ public final class WorldgenSurvey {
                 output.resolve("analytical-terrain-error-classes.png")
             );
             Files.writeString(output.resolve("survey.txt"), result.report());
-            Files.writeString(
-                output.resolve("stage6-runtime.txt"),
+            String stage6Runtime =
                 SurfaceProvincePass.snapshotAndReset(
                     server.overworld().getChunkSource().randomState()
                 ) + VegetationProvincePass.snapshotAndReset(
                     server.overworld().getChunkSource().randomState()
-                ) + Stage6Profiler.snapshotAndReset()
+                ) + Stage6Profiler.snapshotAndReset();
+            Files.writeString(
+                output.resolve("stage6-runtime.txt"),
+                stage6Runtime
+            );
+            Files.writeString(
+                output.resolve("stage6-runtime-points.txt"),
+                describeRuntimePoints(server.overworld(), stage6Runtime)
             );
             if ("1".equals(System.getenv("NEXUS_LANDSCAPE_TARGETED_ONLY"))) {
                 LOGGER.info(
@@ -222,12 +238,95 @@ public final class WorldgenSurvey {
         }
     }
 
+    private static String describeRequestedQaPoints(ServerLevel level) {
+        String requested = System.getenv("NEXUS_LANDSCAPE_QA_POINTS");
+        if (requested == null || requested.isBlank()) {
+            return "seed=" + level.getSeed() + "\nerror=no_points\n";
+        }
+        StringBuilder telemetry = new StringBuilder();
+        int index = 0;
+        for (String point : requested.split(";")) {
+            String[] values = point.trim().split(",");
+            if (values.length != 3) {
+                continue;
+            }
+            telemetry.append("qa.point.").append(index++)
+                .append(".first=").append(point.trim()).append('\n');
+        }
+        return describeRuntimePoints(level, telemetry.toString());
+    }
+
+    private static String describeRuntimePoints(
+        ServerLevel level,
+        String telemetry
+    ) {
+        StringBuilder output = new StringBuilder();
+        output.append("seed=").append(level.getSeed()).append('\n');
+        for (String line : telemetry.lines().toList()) {
+            if (!line.contains(".first=") || line.endsWith("=none")) {
+                continue;
+            }
+            int separator = line.indexOf('=');
+            String category = line.substring(0, separator);
+            String[] coordinates = line.substring(separator + 1).split(",");
+            if (coordinates.length != 3) {
+                continue;
+            }
+            int x = Integer.parseInt(coordinates[0]);
+            int y = Integer.parseInt(coordinates[1]);
+            int z = Integer.parseInt(coordinates[2]);
+            String biome = level.getBiome(new BlockPos(x, y, z)).unwrapKey()
+                .map(key -> key.location().toString())
+                .orElse("nexus_landscape:unknown");
+            boolean underground = category.startsWith("cave.")
+                || SurfaceProfileCatalog.find(biome)
+                    .map(profile -> profile.elevation()
+                        == SurfaceProfile.ElevationBand.SUBTERRANEAN)
+                    .orElse(y < 40);
+            NexusV2FieldSampler fields = new NexusV2FieldSampler(
+                level.getChunkSource().randomState()
+            );
+            NexusV2FieldSampler.SurfaceInputs input = fields.surfaceInputs(x, z);
+            SurfaceProfile surface = SurfaceProfileCatalog.find(biome)
+                .filter(profile -> !underground && profile.elevation()
+                    != SurfaceProfile.ElevationBand.SUBTERRANEAN)
+                .orElseGet(() -> SurfaceProfileCatalog.fallback(
+                    input.temperature(), input.humidity(), underground
+                ));
+            var vegetation = VegetationProfileCatalog.find(biome)
+                .filter(profile -> profile.terrestrial() != underground)
+                .orElseGet(() -> VegetationProfileCatalog.fallback(
+                    input.temperature(), input.humidity(), underground
+                ));
+            output.append(category)
+                .append(" x=").append(x)
+                .append(" y=").append(y)
+                .append(" z=").append(z)
+                .append(" chunk=").append(Math.floorDiv(x, 16))
+                .append(',').append(Math.floorDiv(z, 16))
+                .append(" biome=").append(biome)
+                .append(" surface=").append(surface.profileId())
+                .append(" vegetation=").append(vegetation.profileId())
+                .append(" cave=").append(underground
+                    ? vegetation.profileId()
+                    : "nexus_landscape:generic_cave_fallback")
+                .append(" mapping=").append(
+                    SurfaceProfileCatalog.find(biome).isPresent()
+                        ? "explicit" : "climate_fallback"
+                )
+                .append('\n');
+        }
+        return output.toString();
+    }
+
     private static String findModdedBiomes(ServerLevel level) {
         Map<String, String> found = new java.util.TreeMap<>();
         int radius = environmentInteger(
             "NEXUS_LANDSCAPE_MODDED_SCAN_RADIUS",
             65_536
         );
+        int centerX = surveyCenter("NEXUS_LANDSCAPE_SURVEY_CENTER_X");
+        int centerZ = surveyCenter("NEXUS_LANDSCAPE_SURVEY_CENTER_Z");
         int step = environmentInteger(
             "NEXUS_LANDSCAPE_MODDED_SCAN_STEP",
             256
@@ -235,8 +334,8 @@ public final class WorldgenSurvey {
         int y = environmentInteger("NEXUS_LANDSCAPE_MODDED_SCAN_Y", 80);
         var biomeSource = level.getChunkSource().getGenerator().getBiomeSource();
         var sampler = level.getChunkSource().randomState().sampler();
-        for (int z = -radius; z <= radius; z += step) {
-            for (int x = -radius; x <= radius; x += step) {
+        for (int z = centerZ - radius; z <= centerZ + radius; z += step) {
+            for (int x = centerX - radius; x <= centerX + radius; x += step) {
                 String key = biomeSource.getNoiseBiome(
                     QuartPos.fromBlock(x),
                     QuartPos.fromBlock(y),

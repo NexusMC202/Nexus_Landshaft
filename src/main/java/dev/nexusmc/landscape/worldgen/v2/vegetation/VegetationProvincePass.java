@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Collections;
 import java.util.WeakHashMap;
 import java.util.concurrent.atomic.LongAdder;
+import java.util.concurrent.atomic.AtomicLong;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -106,11 +107,35 @@ public final class VegetationProvincePass {
             + "cave.profile.lush=" + value(telemetry.caveLush, reset) + '\n'
             + "cave.profile.dripstone=" + value(telemetry.caveDripstone, reset) + '\n'
             + "cave.profile.deep_dark=" + value(telemetry.caveDeepDark, reset) + '\n'
-            + "cave.profile.generic=" + value(telemetry.caveGeneric, reset) + '\n';
+            + "cave.profile.generic=" + value(telemetry.caveGeneric, reset) + '\n'
+            + cavePositions(telemetry, reset);
     }
 
     private static long value(LongAdder counter, boolean reset) {
         return reset ? counter.sumThenReset() : counter.sum();
+    }
+
+    private static String position(AtomicLong coordinate, boolean reset) {
+        long packed = reset
+            ? coordinate.getAndSet(Long.MIN_VALUE)
+            : coordinate.get();
+        if (packed == Long.MIN_VALUE) {
+            return "none";
+        }
+        return BlockPos.getX(packed) + "," + BlockPos.getY(packed) + ","
+            + BlockPos.getZ(packed);
+    }
+
+    private static String cavePositions(Telemetry telemetry, boolean reset) {
+        String[] names = {"lush", "dripstone", "deep_dark", "generic"};
+        StringBuilder output = new StringBuilder();
+        for (int index = 0; index < names.length; index++) {
+            output.append("cave.profile.").append(names[index])
+                .append(".first=")
+                .append(position(telemetry.firstCaves[index], reset))
+                .append('\n');
+        }
+        return output.toString();
     }
 
     private static void decorateGround(
@@ -127,7 +152,12 @@ public final class VegetationProvincePass {
         if (sample == null || !sample.selection().terrestrialAllowed()) {
             return;
         }
-        telemetry.provinces[classifyProvince(sample).ordinal()].increment();
+        Province province = classifyProvince(sample);
+        telemetry.provinces[province.ordinal()].increment();
+        telemetry.firstProvinces[province.ordinal()].compareAndSet(
+            Long.MIN_VALUE,
+            BlockPos.asLong(x, sample.surfaceY(), z)
+        );
         BlockPos position = new BlockPos(x, sample.surfaceY() + 1, z);
         if (!level.isEmptyBlock(position)) {
             return;
@@ -343,18 +373,30 @@ public final class VegetationProvincePass {
                         if (!biomeId.isEmpty()
                             && !biomeId.startsWith("minecraft:")) {
                             telemetry.caveGeneric.increment();
+                            telemetry.firstCaves[3].compareAndSet(
+                                Long.MIN_VALUE, BlockPos.asLong(x, y, z)
+                            );
                         }
                         continue;
                     }
                     if (profile.terrestrial()) {
                         continue;
                     }
-                    switch (profile.family()) {
-                        case LUSH_CAVE -> telemetry.caveLush.increment();
-                        case DRIPSTONE_CAVE -> telemetry.caveDripstone.increment();
-                        case DEEP_DARK -> telemetry.caveDeepDark.increment();
+                    int caveIndex = switch (profile.family()) {
+                        case LUSH_CAVE -> 0;
+                        case DRIPSTONE_CAVE -> 1;
+                        case DEEP_DARK -> 2;
+                        default -> 3;
+                    };
+                    switch (caveIndex) {
+                        case 0 -> telemetry.caveLush.increment();
+                        case 1 -> telemetry.caveDripstone.increment();
+                        case 2 -> telemetry.caveDeepDark.increment();
                         default -> telemetry.caveGeneric.increment();
                     }
+                    telemetry.firstCaves[caveIndex].compareAndSet(
+                        Long.MIN_VALUE, BlockPos.asLong(x, y, z)
+                    );
                     if (!level.isEmptyBlock(cursor)
                         || level.getBlockState(cursor.below()).isAir()) {
                         continue;
@@ -483,7 +525,7 @@ public final class VegetationProvincePass {
             || surface.surfaceY() > sample.profile().treeLineY() - 20) {
             return Province.ALPINE;
         }
-        if (surface.slope() > 0.58) {
+        if (surface.exposedSlope()) {
             return Province.ROCKY_SLOPE;
         }
         if (surface.groundwater() > 0.68
@@ -509,6 +551,13 @@ public final class VegetationProvincePass {
                 .append(province.name().toLowerCase(java.util.Locale.ROOT))
                 .append('=')
                 .append(value(telemetry.provinces[province.ordinal()], reset))
+                .append('\n');
+            output.append("vegetation.province.")
+                .append(province.name().toLowerCase(java.util.Locale.ROOT))
+                .append(".first=")
+                .append(position(
+                    telemetry.firstProvinces[province.ordinal()], reset
+                ))
                 .append('\n');
         }
         return output.toString();
@@ -578,16 +627,23 @@ public final class VegetationProvincePass {
         private final LongAdder treeRejectedDensity = new LongAdder();
         private final LongAdder treeRejectedOther = new LongAdder();
         private final LongAdder[] provinces = new LongAdder[Province.values().length];
+        private final AtomicLong[] firstProvinces =
+            new AtomicLong[Province.values().length];
         private final LongAdder caveColumns = new LongAdder();
         private final LongAdder caves = new LongAdder();
         private final LongAdder caveLush = new LongAdder();
         private final LongAdder caveDripstone = new LongAdder();
         private final LongAdder caveDeepDark = new LongAdder();
         private final LongAdder caveGeneric = new LongAdder();
+        private final AtomicLong[] firstCaves = new AtomicLong[4];
 
         private Telemetry() {
             for (int index = 0; index < provinces.length; index++) {
                 provinces[index] = new LongAdder();
+                firstProvinces[index] = new AtomicLong(Long.MIN_VALUE);
+            }
+            for (int index = 0; index < firstCaves.length; index++) {
+                firstCaves[index] = new AtomicLong(Long.MIN_VALUE);
             }
         }
     }
