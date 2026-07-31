@@ -1,5 +1,6 @@
 package dev.nexusmc.landscape.worldgen.v2.vegetation;
 
+import dev.nexusmc.landscape.diagnostics.Stage6Profiler;
 import dev.nexusmc.landscape.worldgen.v2.field.NexusV2FieldSampler;
 import dev.nexusmc.landscape.worldgen.v2.field.RegionalFieldMath;
 import dev.nexusmc.landscape.worldgen.v2.hydrology.HydrologyMath;
@@ -76,10 +77,24 @@ public final class VegetationProvincePass {
     public static String snapshotAndReset(RandomState randomState) {
         Telemetry telemetry = telemetry(randomState);
         return "vegetation.chunks=" + telemetry.chunks.sumThenReset() + '\n'
-            + "vegetation.ground_blocks=" + telemetry.ground.sumThenReset() + '\n'
+            + "vegetation.ground_attempts=" + telemetry.groundAttempts.sumThenReset() + '\n'
+            + "vegetation.ground_placed=" + telemetry.ground.sumThenReset() + '\n'
             + "vegetation.rock_blocks=" + telemetry.rocks.sumThenReset() + '\n'
-            + "vegetation.tree_attempts=" + telemetry.trees.sumThenReset() + '\n'
-            + "vegetation.cave_accents=" + telemetry.caves.sumThenReset() + '\n';
+            + "vegetation.tree_attempts=" + telemetry.treeAttempts.sumThenReset() + '\n'
+            + "vegetation.tree_placed=" + telemetry.trees.sumThenReset() + '\n'
+            + "vegetation.tree_rejected_slope=" + telemetry.treeRejectedSlope.sumThenReset() + '\n'
+            + "vegetation.tree_rejected_water=" + telemetry.treeRejectedWater.sumThenReset() + '\n'
+            + "vegetation.tree_rejected_river=" + telemetry.treeRejectedRiver.sumThenReset() + '\n'
+            + "vegetation.tree_rejected_altitude=" + telemetry.treeRejectedAltitude.sumThenReset() + '\n'
+            + "vegetation.tree_rejected_density=" + telemetry.treeRejectedDensity.sumThenReset() + '\n'
+            + "vegetation.tree_rejected_other=" + telemetry.treeRejectedOther.sumThenReset() + '\n'
+            + provinceSnapshot(telemetry)
+            + "cave.columns_or_sections_processed=" + telemetry.caveColumns.sumThenReset() + '\n'
+            + "cave.blocks_changed=" + telemetry.caves.sumThenReset() + '\n'
+            + "cave.profile.lush=" + telemetry.caveLush.sumThenReset() + '\n'
+            + "cave.profile.dripstone=" + telemetry.caveDripstone.sumThenReset() + '\n'
+            + "cave.profile.deep_dark=" + telemetry.caveDeepDark.sumThenReset() + '\n'
+            + "cave.profile.generic=" + telemetry.caveGeneric.sumThenReset() + '\n';
     }
 
     private static void decorateGround(
@@ -91,10 +106,12 @@ public final class VegetationProvincePass {
         int z,
         Telemetry telemetry
     ) {
+        telemetry.groundAttempts.increment();
         Sample sample = sample(level, fields, hydrology, seed, x, z);
         if (sample == null || !sample.selection().terrestrialAllowed()) {
             return;
         }
+        telemetry.provinces[classifyProvince(sample).ordinal()].increment();
         BlockPos position = new BlockPos(x, sample.surfaceY() + 1, z);
         if (!level.isEmptyBlock(position)) {
             return;
@@ -151,11 +168,19 @@ public final class VegetationProvincePass {
                 if (x < minX || x > minX + 15 || z < minZ || z > minZ + 15) {
                     continue;
                 }
+                telemetry.treeAttempts.increment();
                 Sample sample = sample(level, fields, hydrology, seed, x, z);
-                if (sample == null
-                    || !sample.selection().treesAllowed()
-                    || unit(seed, x, z, 0x7AEE1L)
-                        >= sample.selection().treeDensity()) {
+                if (sample == null) {
+                    telemetry.treeRejectedOther.increment();
+                    continue;
+                }
+                if (!sample.selection().treesAllowed()) {
+                    recordTreeRejection(sample, telemetry);
+                    continue;
+                }
+                if (unit(seed, x, z, 0x7AEE1L)
+                    >= sample.selection().treeDensity()) {
+                    telemetry.treeRejectedDensity.increment();
                     continue;
                 }
                 VegetationProfile.TreeShape shape = sample.profile().treeShapes()
@@ -163,14 +188,23 @@ public final class VegetationProvincePass {
                         SurfaceNoise.hash(seed, x, z, 0x5A9EL),
                         sample.profile().treeShapes().size()
                     ));
-                buildTree(
+                long placementStarted = Stage6Profiler.start();
+                boolean placed = buildTree(
                     level,
                     new BlockPos(x, sample.surfaceY() + 1, z),
                     shape,
                     unit(seed, x, z, 0x01D6L)
                         < sample.selection().oldGrowthDensity()
                 );
-                telemetry.trees.increment();
+                Stage6Profiler.record(
+                    Stage6Profiler.Phase.VEGETATION_BLOCK_PLACEMENT,
+                    placementStarted
+                );
+                if (placed) {
+                    telemetry.trees.increment();
+                } else {
+                    telemetry.treeRejectedOther.increment();
+                }
             }
         }
     }
@@ -183,15 +217,22 @@ public final class VegetationProvincePass {
         int x,
         int z
     ) {
+        long samplingStarted = Stage6Profiler.start();
         int surfaceY = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z) - 1;
         if (surfaceY <= level.getMinBuildHeight() + 4) {
             return null;
         }
         BlockPos surface = new BlockPos(x, surfaceY, z);
+        long biomeStarted = Stage6Profiler.start();
         Holder<Biome> biome = level.getBiome(surface);
         String biomeId = biome.unwrapKey()
             .map(key -> key.location().toString())
             .orElse("nexus_landscape:unknown");
+        Stage6Profiler.record(
+            Stage6Profiler.Phase.VEGETATION_BIOME_LOOKUP,
+            biomeStarted
+        );
+        long contextStarted = Stage6Profiler.start();
         NexusV2FieldSampler.SurfaceInputs input = fields.surfaceInputs(x, z);
         RegionalFieldMath.Sample regional = SurfaceContextFactory.regional(input);
         HydrologyMath.Sample river = hydrology.sample(x, z);
@@ -229,12 +270,21 @@ public final class VegetationProvincePass {
             false,
             water
         );
-        return new Sample(
+        Sample result = new Sample(
             surfaceY,
             profile,
             context,
             VegetationResolver.resolve(profile, context)
         );
+        Stage6Profiler.record(
+            Stage6Profiler.Phase.VEGETATION_CONTEXT_PREPARATION,
+            contextStarted
+        );
+        Stage6Profiler.record(
+            Stage6Profiler.Phase.VEGETATION_SAMPLING,
+            samplingStarted
+        );
+        return result;
     }
 
     private static void decorateCaves(
@@ -243,6 +293,7 @@ public final class VegetationProvincePass {
         long seed,
         Telemetry telemetry
     ) {
+        long caveStarted = Stage6Profiler.start();
         int minX = chunk.getPos().getMinBlockX();
         int minZ = chunk.getPos().getMinBlockZ();
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
@@ -250,15 +301,33 @@ public final class VegetationProvincePass {
             for (int localX : new int[] {3, 11}) {
                 int x = minX + localX;
                 int z = minZ + localZ;
-                for (int y : new int[] {-32, 0, 32}) {
+                telemetry.caveColumns.increment();
+                int topY = Math.min(
+                    96,
+                    level.getHeight(Heightmap.Types.OCEAN_FLOOR_WG, x, z) - 8
+                );
+                for (int y = level.getMinBuildHeight() + 8; y <= topY; y += 4) {
                     cursor.set(x, y, z);
                     String biomeId = level.getBiome(cursor).unwrapKey()
                         .map(key -> key.location().toString())
                         .orElse("");
                     VegetationProfile profile =
                         VegetationProfileCatalog.find(biomeId).orElse(null);
-                    if (profile == null || profile.terrestrial()) {
+                    if (profile == null) {
+                        if (!biomeId.isEmpty()
+                            && !biomeId.startsWith("minecraft:")) {
+                            telemetry.caveGeneric.increment();
+                        }
                         continue;
+                    }
+                    if (profile.terrestrial()) {
+                        continue;
+                    }
+                    switch (profile.family()) {
+                        case LUSH_CAVE -> telemetry.caveLush.increment();
+                        case DRIPSTONE_CAVE -> telemetry.caveDripstone.increment();
+                        case DEEP_DARK -> telemetry.caveDeepDark.increment();
+                        default -> telemetry.caveGeneric.increment();
                     }
                     if (!level.isEmptyBlock(cursor)
                         || level.getBlockState(cursor.below()).isAir()) {
@@ -279,9 +348,10 @@ public final class VegetationProvincePass {
                 }
             }
         }
+        Stage6Profiler.record(Stage6Profiler.Phase.CAVE_ACCENTS, caveStarted);
     }
 
-    private static void buildTree(
+    private static boolean buildTree(
         WorldGenLevel level,
         BlockPos base,
         VegetationProfile.TreeShape shape,
@@ -316,12 +386,12 @@ public final class VegetationProvincePass {
         };
         if (!level.getFluidState(base).isEmpty()
             || !level.getBlockState(base).canBeReplaced()) {
-            return;
+            return false;
         }
         for (int y = 0; y < height; y++) {
             BlockPos position = base.above(y);
             if (!level.getBlockState(position).canBeReplaced()) {
-                return;
+                return false;
             }
         }
         BlockState log = logBlock.defaultBlockState();
@@ -358,6 +428,64 @@ public final class VegetationProvincePass {
                 }
             }
         }
+        return true;
+    }
+
+    private static void recordTreeRejection(
+        Sample sample,
+        Telemetry telemetry
+    ) {
+        SurfaceContext surface = sample.context().surface();
+        if (sample.context().waterAtSurface()) {
+            telemetry.treeRejectedWater.increment();
+        } else if (Math.max(surface.riverMask(), surface.riverInfluence()) >= 0.10) {
+            telemetry.treeRejectedRiver.increment();
+        } else if (surface.slope() >= sample.profile().maxTreeSlope() * 0.55) {
+            telemetry.treeRejectedSlope.increment();
+        } else if (surface.surfaceY() >= sample.profile().treeLineY() - 28) {
+            telemetry.treeRejectedAltitude.increment();
+        } else {
+            telemetry.treeRejectedOther.increment();
+        }
+    }
+
+    private static Province classifyProvince(Sample sample) {
+        SurfaceContext surface = sample.context().surface();
+        if (surface.coastWeight() > 0.34) {
+            return Province.COASTAL;
+        }
+        if (surface.surfaceY() > sample.profile().treeLineY() - 20) {
+            return Province.ALPINE;
+        }
+        if (surface.slope() > 0.58) {
+            return Province.ROCKY_SLOPE;
+        }
+        if (surface.groundwater() > 0.68
+            || surface.wetBank()) {
+            return Province.WET_LOWLAND;
+        }
+        if (sample.context().clearingNoise() < sample.profile().clearingShare()) {
+            return Province.CLEARING;
+        }
+        if (sample.context().forestCore() > 0.72) {
+            return Province.DENSE_FOREST;
+        }
+        if (sample.selection().treeDensity() > 0.08) {
+            return Province.WOODLAND;
+        }
+        return Province.OPEN_VALLEY;
+    }
+
+    private static String provinceSnapshot(Telemetry telemetry) {
+        StringBuilder output = new StringBuilder();
+        for (Province province : Province.values()) {
+            output.append("vegetation.province.")
+                .append(province.name().toLowerCase(java.util.Locale.ROOT))
+                .append('=')
+                .append(telemetry.provinces[province.ordinal()].sumThenReset())
+                .append('\n');
+        }
+        return output.toString();
     }
 
     private static BlockState chooseGround(
@@ -412,10 +540,41 @@ public final class VegetationProvincePass {
 
     private static final class Telemetry {
         private final LongAdder chunks = new LongAdder();
+        private final LongAdder groundAttempts = new LongAdder();
         private final LongAdder ground = new LongAdder();
         private final LongAdder rocks = new LongAdder();
+        private final LongAdder treeAttempts = new LongAdder();
         private final LongAdder trees = new LongAdder();
+        private final LongAdder treeRejectedSlope = new LongAdder();
+        private final LongAdder treeRejectedWater = new LongAdder();
+        private final LongAdder treeRejectedRiver = new LongAdder();
+        private final LongAdder treeRejectedAltitude = new LongAdder();
+        private final LongAdder treeRejectedDensity = new LongAdder();
+        private final LongAdder treeRejectedOther = new LongAdder();
+        private final LongAdder[] provinces = new LongAdder[Province.values().length];
+        private final LongAdder caveColumns = new LongAdder();
         private final LongAdder caves = new LongAdder();
+        private final LongAdder caveLush = new LongAdder();
+        private final LongAdder caveDripstone = new LongAdder();
+        private final LongAdder caveDeepDark = new LongAdder();
+        private final LongAdder caveGeneric = new LongAdder();
+
+        private Telemetry() {
+            for (int index = 0; index < provinces.length; index++) {
+                provinces[index] = new LongAdder();
+            }
+        }
+    }
+
+    private enum Province {
+        DENSE_FOREST,
+        WOODLAND,
+        CLEARING,
+        OPEN_VALLEY,
+        WET_LOWLAND,
+        ROCKY_SLOPE,
+        ALPINE,
+        COASTAL
     }
 
     private record Sample(

@@ -15,6 +15,7 @@ import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.WorldGenLevel;
 import dev.nexusmc.landscape.worldgen.v2.vegetation.VegetationProvincePass;
+import dev.nexusmc.landscape.diagnostics.Stage6Profiler;
 
 /**
  * Stable V2 generator codec. Stage 4 deliberately delegates every generation
@@ -49,9 +50,15 @@ public final class NexusV2ChunkGenerator extends NoiseBasedChunkGenerator {
         RandomState random,
         ChunkAccess chunk
     ) {
+        long started = Stage6Profiler.start();
         super.buildSurface(level, structureManager, random, chunk);
+        Stage6Profiler.record(Stage6Profiler.Phase.VANILLA_SURFACE, started);
+        started = Stage6Profiler.start();
         SurfaceProvincePass.apply(level, chunk, random);
+        Stage6Profiler.record(Stage6Profiler.Phase.NEXUS_SURFACE, started);
+        started = Stage6Profiler.start();
         RiverWaterPass.apply(chunk, random);
+        Stage6Profiler.record(Stage6Profiler.Phase.RIVER_WATER, started);
     }
 
     @Override
@@ -60,12 +67,22 @@ public final class NexusV2ChunkGenerator extends NoiseBasedChunkGenerator {
         ChunkAccess chunk,
         StructureManager structureManager
     ) {
+        long started = Stage6Profiler.start();
         super.applyBiomeDecoration(level, chunk, structureManager);
+        Stage6Profiler.record(
+            Stage6Profiler.Phase.VANILLA_PLACED_FEATURES,
+            started
+        );
         if (level instanceof WorldGenRegion region) {
+            started = Stage6Profiler.start();
             VegetationProvincePass.apply(
                 level,
                 chunk,
                 region.getLevel().getChunkSource().randomState()
+            );
+            Stage6Profiler.record(
+                Stage6Profiler.Phase.NEXUS_VEGETATION,
+                started
             );
         }
     }

@@ -54,7 +54,14 @@ public final class SurfaceProfileResolver {
                 profile.soilDepth()
             );
         }
-        double coast = smoothstep(0.38, 0.78, context.coastWeight());
+        // The regional coast field is deliberately broad. Surface materials
+        // must additionally be near sea level or it paints inland highlands.
+        double coast = smoothstep(
+            0.38,
+            0.78,
+            context.coastWeight()
+                * smoothstep(104.0, 72.0, context.elevation())
+        );
         if (accept(coast, context.localNoise())) {
             return selection(
                 profile,

@@ -153,8 +153,15 @@ public final class SurfaceProfileSelfTest {
             SurfaceSelection.Zone.CHANNEL);
         requireZone(profile, context(0.0, 0.8, 0.9, 0.9, 220.0, 0.8),
             SurfaceSelection.Zone.LAKE_SHORE);
-        requireZone(profile, context(0.0, 0.0, 0.0, 0.8, 220.0, 0.8),
+        requireZone(profile, context(0.0, 0.0, 0.0, 0.8, 72.0, 0.8),
             SurfaceSelection.Zone.COAST);
+        require(
+            SurfaceProfileResolver.resolve(
+                profile,
+                context(0.0, 0.0, 0.0, 0.9, 180.0, 0.0)
+            ).zone() != SurfaceSelection.Zone.COAST,
+            "broad coast field painted a highland"
+        );
         requireZone(profile, context(0.0, 0.0, 0.0, 0.0, 220.0, 0.8),
             SurfaceSelection.Zone.ALPINE);
         requireZone(profile, context(0.0, 0.0, 0.0, 0.0, 80.0, 0.8),

@@ -107,6 +107,7 @@ public final class WorldgenSurvey {
             VegetationProvincePass.snapshotAndReset(
                 server.overworld().getChunkSource().randomState()
             );
+            Stage6Profiler.snapshotAndReset();
             SurveyResult result = survey(server.overworld());
             writeMap(result.colors(), output.resolve("survey.png"));
             writeMap(result.provinceColors(), output.resolve("province.png"));
@@ -133,7 +134,7 @@ public final class WorldgenSurvey {
                     server.overworld().getChunkSource().randomState()
                 ) + VegetationProvincePass.snapshotAndReset(
                     server.overworld().getChunkSource().randomState()
-                )
+                ) + Stage6Profiler.snapshotAndReset()
             );
             if ("1".equals(System.getenv("NEXUS_LANDSCAPE_TARGETED_ONLY"))) {
                 LOGGER.info(

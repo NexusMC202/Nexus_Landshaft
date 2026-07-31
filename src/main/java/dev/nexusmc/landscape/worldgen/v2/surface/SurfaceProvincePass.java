@@ -1,6 +1,7 @@
 package dev.nexusmc.landscape.worldgen.v2.surface;
 
 import com.mojang.logging.LogUtils;
+import dev.nexusmc.landscape.diagnostics.Stage6Profiler;
 import dev.nexusmc.landscape.worldgen.v2.field.NexusV2FieldSampler;
 import dev.nexusmc.landscape.worldgen.v2.field.RegionalFieldMath;
 import dev.nexusmc.landscape.worldgen.v2.hydrology.HydrologyMath;
@@ -54,11 +55,14 @@ public final class SurfaceProvincePass {
         NexusV2FieldSampler fields = new NexusV2FieldSampler(randomState);
         NexusV2HydrologySampler hydrology =
             new NexusV2HydrologySampler(randomState);
+        HydrologyChunkGrid hydrologyGrid =
+            new HydrologyChunkGrid(minX, minZ, hydrology);
         Telemetry telemetry = telemetry(randomState);
         NexusV2FieldSampler.SurfaceInputs[][] inputs =
             new NexusV2FieldSampler.SurfaceInputs[18][18];
         double[][] analyticalY = new double[18][18];
 
+        long phaseStarted = Stage6Profiler.start();
         for (int gridZ = 0; gridZ < 18; gridZ++) {
             for (int gridX = 0; gridX < 18; gridX++) {
                 int worldX = minX + gridX - 1;
@@ -69,6 +73,10 @@ public final class SurfaceProvincePass {
                 analyticalY[gridZ][gridX] = analytical(input).surfaceY();
             }
         }
+        Stage6Profiler.record(
+            Stage6Profiler.Phase.SURFACE_NOISE_SAMPLING,
+            phaseStarted
+        );
 
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
         for (int localZ = 0; localZ < 16; localZ++) {
@@ -80,19 +88,25 @@ public final class SurfaceProvincePass {
                     continue;
                 }
                 cursor.set(worldX, surfaceY, worldZ);
+                phaseStarted = Stage6Profiler.start();
                 Holder<Biome> biome = level.getBiome(cursor);
                 String biomeKey = biome.unwrapKey()
                     .map(key -> key.location().toString())
                     .orElse("nexus_landscape:unknown");
+                Stage6Profiler.record(
+                    Stage6Profiler.Phase.SURFACE_BIOME_LOOKUP,
+                    phaseStarted
+                );
 
+                phaseStarted = Stage6Profiler.start();
                 NexusV2FieldSampler.SurfaceInputs input =
                     inputs[localZ + 1][localX + 1];
                 RegionalFieldMath.Sample regional =
                     SurfaceContextFactory.regional(input);
                 HydrologyMath.Sample river =
-                    hydrology.sample(worldX, worldZ);
+                    hydrologyGrid.river(worldX, worldZ);
                 HydrologyMath.BasinSample basin =
-                    hydrology.basinSample(worldX, worldZ);
+                    hydrologyGrid.basin(worldX, worldZ);
                 double slope = slope(
                     analyticalY,
                     localX + 1,
@@ -121,6 +135,11 @@ public final class SurfaceProvincePass {
                     ));
                 SurfaceSelection selection =
                     SurfaceProfileResolver.resolve(profile, context);
+                Stage6Profiler.record(
+                    Stage6Profiler.Phase.SURFACE_CONTEXT_PREPARATION,
+                    phaseStarted
+                );
+                phaseStarted = Stage6Profiler.start();
                 int changed = applyColumn(
                     chunk,
                     cursor,
@@ -128,9 +147,14 @@ public final class SurfaceProvincePass {
                     selection,
                     context
                 );
+                Stage6Profiler.record(
+                    Stage6Profiler.Phase.SURFACE_BLOCK_REPLACEMENT,
+                    phaseStarted
+                );
                 telemetry.columns.increment();
                 telemetry.blocks.add(changed);
                 telemetry.zones[selection.zone().ordinal()].increment();
+                validateDominantZone(context, selection, telemetry);
             }
         }
     }
@@ -149,7 +173,59 @@ public final class SurfaceProvincePass {
                 .append(telemetry.zones[zone.ordinal()].sumThenReset())
                 .append('\n');
         }
+        result.append("surface.zone.river=")
+            .append(telemetry.aliasRiver.sumThenReset()).append('\n');
+        result.append("surface.zone.lake=")
+            .append(telemetry.aliasLake.sumThenReset()).append('\n');
+        result.append("surface.zone.slope=")
+            .append(telemetry.aliasSlope.sumThenReset()).append('\n');
+        result.append("surface.invalid.river_coast_dominance=")
+            .append(telemetry.invalidRiverCoast.sumThenReset()).append('\n');
+        result.append("surface.invalid.alpine_low_altitude=")
+            .append(telemetry.invalidAlpineLow.sumThenReset()).append('\n');
+        result.append("surface.invalid.wet_bank_far_from_water=")
+            .append(telemetry.invalidWetBankFar.sumThenReset()).append('\n');
+        result.append("surface.invalid.lake_shore_on_channel=")
+            .append(telemetry.invalidLakeOnChannel.sumThenReset()).append('\n');
+        result.append("surface.invalid.processing_below_minimum=")
+            .append(telemetry.invalidBelowMinimum.sumThenReset()).append('\n');
         return result.toString();
+    }
+
+    private static void validateDominantZone(
+        SurfaceContext context,
+        SurfaceSelection selection,
+        Telemetry telemetry
+    ) {
+        switch (selection.zone()) {
+            case CHANNEL -> telemetry.aliasRiver.increment();
+            case LAKE_SHORE -> telemetry.aliasLake.increment();
+            case EXPOSED_SLOPE -> telemetry.aliasSlope.increment();
+            default -> {
+            }
+        }
+        if (selection.zone() == SurfaceSelection.Zone.COAST
+            && context.activeChannel()) {
+            telemetry.invalidRiverCoast.increment();
+        }
+        if (selection.zone() == SurfaceSelection.Zone.ALPINE
+            && context.surfaceY() < 96
+            && context.glacierWeight() < 0.55) {
+            telemetry.invalidAlpineLow.increment();
+        }
+        if (selection.zone() == SurfaceSelection.Zone.WET_BANK
+            && context.riverDistance() > 24.0
+            && context.groundwater() < 0.65
+            && context.lakeBasinMask() < 0.10) {
+            telemetry.invalidWetBankFar.increment();
+        }
+        if (selection.zone() == SurfaceSelection.Zone.LAKE_SHORE
+            && context.activeChannel()) {
+            telemetry.invalidLakeOnChannel.increment();
+        }
+        if (context.surfaceY() < -60) {
+            telemetry.invalidBelowMinimum.increment();
+        }
     }
 
     private static int applyColumn(
@@ -352,6 +428,14 @@ public final class SurfaceProvincePass {
         private final LongAdder blocks = new LongAdder();
         private final LongAdder[] zones =
             new LongAdder[SurfaceSelection.Zone.values().length];
+        private final LongAdder aliasRiver = new LongAdder();
+        private final LongAdder aliasLake = new LongAdder();
+        private final LongAdder aliasSlope = new LongAdder();
+        private final LongAdder invalidRiverCoast = new LongAdder();
+        private final LongAdder invalidAlpineLow = new LongAdder();
+        private final LongAdder invalidWetBankFar = new LongAdder();
+        private final LongAdder invalidLakeOnChannel = new LongAdder();
+        private final LongAdder invalidBelowMinimum = new LongAdder();
 
         private Telemetry() {
             for (int index = 0; index < zones.length; index++) {
