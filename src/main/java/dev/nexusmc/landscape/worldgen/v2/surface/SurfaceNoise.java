@@ -16,6 +16,10 @@ public final class SurfaceNoise {
         int scale,
         long salt
     ) {
+        if (scale <= 0) {
+            throw new IllegalArgumentException("scale must be positive: " + scale);
+        }
+
         int cellX = Math.floorDiv(blockX, scale);
         int cellZ = Math.floorDiv(blockZ, scale);
         double tx = smooth(Math.floorMod(blockX, scale) / (double)scale);
