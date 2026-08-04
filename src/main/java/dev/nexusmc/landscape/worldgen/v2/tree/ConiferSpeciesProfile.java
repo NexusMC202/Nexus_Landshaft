@@ -1,0 +1,120 @@
+package dev.nexusmc.landscape.worldgen.v2.tree;
+
+import dev.nexusmc.landscape.worldgen.v2.vegetation.VegetationProfile;
+
+/**
+ * Species-level modifiers applied before anatomical planning. The shared tree
+ * engine remains identical, while spruce and pine resolve visibly different
+ * silhouettes, crown positions and foliage density.
+ */
+public enum ConiferSpeciesProfile {
+    SPRUCE(
+        1.00,
+        -0.06,
+        0.92,
+        1.00,
+        1.18,
+        0.96,
+        0.86
+    ),
+    PINE(
+        1.16,
+        0.20,
+        1.10,
+        0.74,
+        0.78,
+        1.06,
+        1.18
+    );
+
+    private final double heightMultiplier;
+    private final double crownStartOffset;
+    private final double branchLengthMultiplier;
+    private final double lowerBranchMultiplier;
+    private final double foliageDensityMultiplier;
+    private final double trunkRadiusMultiplier;
+    private final double upperCrownMultiplier;
+
+    ConiferSpeciesProfile(
+        double heightMultiplier,
+        double crownStartOffset,
+        double branchLengthMultiplier,
+        double lowerBranchMultiplier,
+        double foliageDensityMultiplier,
+        double trunkRadiusMultiplier,
+        double upperCrownMultiplier
+    ) {
+        this.heightMultiplier = positive(heightMultiplier, "heightMultiplier");
+        this.crownStartOffset = finite(crownStartOffset, "crownStartOffset");
+        this.branchLengthMultiplier = positive(
+            branchLengthMultiplier, "branchLengthMultiplier"
+        );
+        this.lowerBranchMultiplier = positive(
+            lowerBranchMultiplier, "lowerBranchMultiplier"
+        );
+        this.foliageDensityMultiplier = positive(
+            foliageDensityMultiplier, "foliageDensityMultiplier"
+        );
+        this.trunkRadiusMultiplier = positive(
+            trunkRadiusMultiplier, "trunkRadiusMultiplier"
+        );
+        this.upperCrownMultiplier = positive(
+            upperCrownMultiplier, "upperCrownMultiplier"
+        );
+    }
+
+    public static ConiferSpeciesProfile fromShape(
+        VegetationProfile.TreeShape shape
+    ) {
+        if (shape == VegetationProfile.TreeShape.SPRUCE_CONICAL) {
+            return SPRUCE;
+        }
+        if (shape == VegetationProfile.TreeShape.PINE_TALL) {
+            return PINE;
+        }
+        throw new IllegalArgumentException("unsupported conifer shape: " + shape);
+    }
+
+    public double heightMultiplier() {
+        return heightMultiplier;
+    }
+
+    public double crownStartOffset() {
+        return crownStartOffset;
+    }
+
+    public double branchLengthMultiplier() {
+        return branchLengthMultiplier;
+    }
+
+    public double lowerBranchMultiplier() {
+        return lowerBranchMultiplier;
+    }
+
+    public double foliageDensityMultiplier() {
+        return foliageDensityMultiplier;
+    }
+
+    public double trunkRadiusMultiplier() {
+        return trunkRadiusMultiplier;
+    }
+
+    public double upperCrownMultiplier() {
+        return upperCrownMultiplier;
+    }
+
+    private static double positive(double value, String name) {
+        finite(value, name);
+        if (value <= 0.0) {
+            throw new IllegalArgumentException(name + " must be positive");
+        }
+        return value;
+    }
+
+    private static double finite(double value, String name) {
+        if (!Double.isFinite(value)) {
+            throw new IllegalArgumentException(name + " must be finite");
+        }
+        return value;
+    }
+}
