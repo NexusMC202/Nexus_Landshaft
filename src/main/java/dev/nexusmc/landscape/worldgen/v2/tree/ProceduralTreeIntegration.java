@@ -64,10 +64,10 @@ public final class ProceduralTreeIntegration {
         double openSpaceZ
     ) {
         if (!ProceduralTreePolicy.supports(shape)) {
-            return Outcome.withoutLookup(Result.UNSUPPORTED, null, 0L);
+            return recorded(Outcome.withoutLookup(Result.UNSUPPORTED, null, 0L));
         }
         if (!ProceduralTreeRuntime.enabled()) {
-            return Outcome.withoutLookup(Result.DISABLED, null, 0L);
+            return recorded(Outcome.withoutLookup(Result.DISABLED, null, 0L));
         }
         if (level == null || base == null) {
             throw new IllegalArgumentException("level and base are required");
@@ -96,23 +96,28 @@ public final class ProceduralTreeIntegration {
             base.getZ(),
             plan.quality()
         )) {
-            return Outcome.withoutLookup(
+            return recorded(Outcome.withoutLookup(
                 Result.QUOTA_REJECTED,
                 plan.quality(),
                 plan.fingerprint()
-            );
+            ));
         }
 
         ProceduralTreeRuntime.Placement placement =
             ProceduralTreeRuntime.placeConiferDetailed(level, base, plan);
         Result result = placement.placed() ? Result.PLACED : Result.COLLISION;
-        return new Outcome(
+        return recorded(new Outcome(
             result,
             plan.quality(),
             plan.fingerprint(),
             true,
             placement.cacheHit()
-        );
+        ));
+    }
+
+    private static Outcome recorded(Outcome outcome) {
+        TreeRuntimeTelemetry.record(outcome);
+        return outcome;
     }
 
     public record Outcome(
