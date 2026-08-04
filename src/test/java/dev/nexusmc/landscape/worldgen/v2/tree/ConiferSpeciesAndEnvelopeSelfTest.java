@@ -10,6 +10,7 @@ public final class ConiferSpeciesAndEnvelopeSelfTest {
     public static void main(String[] args) {
         verifySpeciesMapping();
         verifySpeciesSilhouetteContract();
+        verifyGeneratedSkeletonsDiffer();
         verifyEnvelopeContract();
         System.out.println("ConiferSpeciesAndEnvelopeSelfTest: PASS");
     }
@@ -45,6 +46,41 @@ public final class ConiferSpeciesAndEnvelopeSelfTest {
             "spruce foliage must be denser");
         require(spruce.lowerBranchMultiplier() > pine.lowerBranchMultiplier(),
             "spruce must retain more lower branches");
+    }
+
+    private static void verifyGeneratedSkeletonsDiffer() {
+        long seed = 0x535045434945534CL;
+        TreeEnvironment environment = new TreeEnvironment(
+            0.14, 0.66, 0.46, 0.07,
+            -0.28, 0.12, 0.62, -0.08, 96
+        );
+        TreeLifeHistory history = TreeLifeHistory.generate(
+            seed, TreeQualityTier.MID, environment
+        );
+        BranchGraph spruce = SpeciesConiferBranchGenerator.generate(
+            seed,
+            ConiferSpeciesProfile.SPRUCE,
+            TreeQualityTier.MID,
+            environment,
+            history
+        );
+        BranchGraph pine = SpeciesConiferBranchGenerator.generate(
+            seed,
+            ConiferSpeciesProfile.PINE,
+            TreeQualityTier.MID,
+            environment,
+            history
+        );
+        int trunkSections = TrunkPlan.resolve(
+            seed, TreeQualityTier.MID, environment, history
+        ).sections();
+
+        require(spruce.fingerprint() != pine.fingerprint(),
+            "spruce and pine graphs must not be identical");
+        require(maxY(pine) > maxY(spruce),
+            "generated pine must be taller than generated spruce");
+        require(firstCrownY(pine, trunkSections) > firstCrownY(spruce, trunkSections),
+            "generated pine crown must begin higher");
     }
 
     private static void verifyEnvelopeContract() {
@@ -85,6 +121,27 @@ public final class ConiferSpeciesAndEnvelopeSelfTest {
             "HERO must use more conservative probes");
         require(spruce.probeCount() < spruce.estimatedVolume(),
             "cheap envelope probes must be below full volume");
+    }
+
+    private static double maxY(BranchGraph graph) {
+        double result = Double.NEGATIVE_INFINITY;
+        for (BranchGraph.Segment segment : graph.segments()) {
+            result = Math.max(result, Math.max(segment.startY(), segment.endY()));
+        }
+        return result;
+    }
+
+    private static double firstCrownY(BranchGraph graph, int trunkSections) {
+        double result = Double.POSITIVE_INFINITY;
+        for (BranchGraph.Segment segment : graph.segments()) {
+            if (segment.id() >= trunkSections && segment.startY() > 0.5) {
+                result = Math.min(result, segment.startY());
+            }
+        }
+        if (!Double.isFinite(result)) {
+            throw new AssertionError("generated conifer has no crown branches");
+        }
+        return result;
     }
 
     private static void expectFailure(Runnable action) {
