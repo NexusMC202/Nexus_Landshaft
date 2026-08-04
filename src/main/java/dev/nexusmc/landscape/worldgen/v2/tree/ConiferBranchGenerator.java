@@ -4,11 +4,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Pure deterministic conifer skeleton generator. It creates a dominant leader,
- * irregular branch whorls, wind-shaped asymmetry, crown gaps and optional
- * damage recovery without touching Minecraft world state.
+ * Pure deterministic conifer skeleton generator driven by explicit anatomical
+ * plans. The tree resolves its trunk, roots and distinct branch families before
+ * any graph segment is emitted.
  */
 public final class ConiferBranchGenerator {
+    private static final double GOLDEN_ANGLE = 2.399963229728653;
+
     private ConiferBranchGenerator() {
     }
 
@@ -18,167 +20,317 @@ public final class ConiferBranchGenerator {
         TreeEnvironment environment,
         TreeLifeHistory history
     ) {
+        if (quality == null || environment == null || history == null) {
+            throw new IllegalArgumentException("conifer generation inputs are required");
+        }
+
+        TrunkPlan trunk = TrunkPlan.resolve(seed, quality, environment, history);
+        RootPlan roots = RootPlan.resolve(seed, quality, environment, history, trunk);
+        BranchFamilyPlan branchFamilies = BranchFamilyPlan.resolve(
+            seed, quality, environment, history, trunk
+        );
+
         List<BranchGraph.Segment> segments = new ArrayList<>();
-        TreeQualityTier.TreeBudget budget = quality.budget();
-
-        int targetHeight = targetHeight(quality, environment, history);
-        int trunkSections = switch (quality) {
-            case BASIC -> 3;
-            case MID -> 5;
-            case HERO -> 7;
-        };
-        trunkSections = Math.min(trunkSections, targetHeight);
-
-        int id = 0;
-        int previous = -1;
-        double startX = 0.0;
-        double startY = 0.0;
-        double startZ = 0.0;
-        for (int section = 0; section < trunkSections; section++) {
-            double t0 = section / (double)trunkSections;
-            double t1 = (section + 1.0) / trunkSections;
-            double endY = targetHeight * t1;
-            double bend = history.trunkLean() * targetHeight * 0.12;
-            double endX = bend * t1 * t1 + environment.openSpaceX() * t1 * 0.35;
-            double endZ = environment.windZ() * targetHeight * 0.035 * t1 * t1
-                + environment.openSpaceZ() * t1 * 0.35;
-            double baseRadius = radiusFor(quality, history);
-            double startRadius = Math.max(0.32, baseRadius * (1.0 - t0 * 0.78));
-            double endRadius = Math.max(0.18, baseRadius * (1.0 - t1 * 0.82));
-            segments.add(new BranchGraph.Segment(
-                id, previous,
-                startX, startY, startZ,
-                endX, endY, endZ,
-                startRadius, endRadius,
-                false
-            ));
-            previous = id;
-            id++;
-            startX = endX;
-            startY = endY;
-            startZ = endZ;
-        }
-
-        int branchBudget = budget.maxBranchSegments() - segments.size();
-        int desiredWhorls = switch (quality) {
-            case BASIC -> 4;
-            case MID -> 8;
-            case HERO -> 14;
-        };
-        desiredWhorls = Math.max(2, Math.min(desiredWhorls, branchBudget / 2));
-
-        long state = TreeLifeHistory.mix(seed ^ 0x0C0A1F3E5D779B11L);
-        for (int whorl = 0; whorl < desiredWhorls && id < budget.maxBranchSegments(); whorl++) {
-            double vertical = (whorl + 1.0) / (desiredWhorls + 1.8);
-            if (vertical < 0.20 || vertical > 0.91) {
-                continue;
-            }
-            state = TreeLifeHistory.mix(state);
-            double gapRoll = TreeLifeHistory.unit(state);
-            if (gapRoll < history.crownLoss() * 0.42) {
-                continue;
-            }
-
-            int branchesInWhorl = quality == TreeQualityTier.BASIC ? 2 : 3;
-            if (quality == TreeQualityTier.HERO && TreeLifeHistory.unit(TreeLifeHistory.mix(state)) > 0.62) {
-                branchesInWhorl = 4;
-            }
-            for (int branch = 0;
-                 branch < branchesInWhorl && id < budget.maxBranchSegments();
-                 branch++) {
-                state = TreeLifeHistory.mix(state);
-                double jitter = (TreeLifeHistory.unit(state) - 0.5) * 0.55;
-                double angle = (Math.PI * 2.0 * branch / branchesInWhorl)
-                    + whorl * 2.399963229728653
-                    + jitter;
-                double crownTaper = 1.0 - Math.abs(vertical - 0.46) / 0.54;
-                crownTaper = Math.max(0.20, crownTaper);
-                double baseLength = switch (quality) {
-                    case BASIC -> 2.4;
-                    case MID -> 4.2;
-                    case HERO -> 6.8;
-                };
-                double length = baseLength * crownTaper
-                    * (0.72 + TreeLifeHistory.unit(state) * 0.48)
-                    * (0.78 + history.vigor() * 0.28);
-
-                double windBias = environment.windX() * Math.cos(angle)
-                    + environment.windZ() * Math.sin(angle);
-                length *= clamp(1.0 + windBias * 0.28, 0.55, 1.30);
-
-                double attachY = targetHeight * vertical;
-                double attachX = history.trunkLean() * attachY * 0.08;
-                double attachZ = environment.windZ() * attachY * 0.025;
-                double droop = length * (0.10 + vertical * 0.18);
-                double endX = attachX + Math.cos(angle) * length;
-                double endZ = attachZ + Math.sin(angle) * length;
-                double endY = attachY + length * (0.10 + vertical * 0.22) - droop;
-                boolean dead = TreeLifeHistory.unit(TreeLifeHistory.mix(state ^ id))
-                    < history.deadBranchShare();
-                double startRadius = Math.max(0.22,
-                    radiusFor(quality, history) * (0.38 - vertical * 0.16));
-                double endRadius = dead ? 0.0 : Math.max(0.08, startRadius * 0.28);
-                int parent = trunkParentFor(vertical, trunkSections);
-                segments.add(new BranchGraph.Segment(
-                    id, parent,
-                    attachX, attachY, attachZ,
-                    endX, endY, endZ,
-                    startRadius, endRadius,
-                    dead
-                ));
-                id++;
-            }
-        }
-
-        if (history.secondaryLeader() && id < budget.maxBranchSegments()) {
-            double splitY = targetHeight * 0.62;
-            double direction = history.trunkLean() >= 0.0 ? -1.0 : 1.0;
-            segments.add(new BranchGraph.Segment(
-                id,
-                trunkParentFor(0.62, trunkSections),
-                history.trunkLean() * splitY * 0.08,
-                splitY,
-                environment.windZ() * splitY * 0.025,
-                direction * targetHeight * 0.13,
-                targetHeight * (0.88 - history.leaderDamage() * 0.12),
-                environment.openSpaceZ() * targetHeight * 0.08,
-                Math.max(0.28, radiusFor(quality, history) * 0.30),
-                0.10,
-                false
-            ));
-        }
+        int budget = quality.budget().maxBranchSegments();
+        int nextId = appendTrunk(segments, trunk);
+        nextId = appendRoots(segments, roots, trunk, nextId, budget);
+        nextId = appendBranchFamilies(
+            segments,
+            branchFamilies,
+            trunk,
+            environment,
+            history,
+            seed,
+            nextId,
+            budget
+        );
+        appendSecondaryLeader(
+            segments, trunk, environment, history, nextId, budget
+        );
 
         return new BranchGraph(segments);
     }
 
-    private static int targetHeight(
-        TreeQualityTier quality,
-        TreeEnvironment environment,
-        TreeLifeHistory history
+    private static int appendTrunk(
+        List<BranchGraph.Segment> segments,
+        TrunkPlan trunk
     ) {
-        double base = switch (quality) {
-            case BASIC -> 8.0;
-            case MID -> 15.0;
-            case HERO -> 27.0;
-        };
-        double competitionStretch = 1.0 + environment.forestCompetition() * 0.18;
-        double stressReduction = 1.0
-            - environment.slope() * 0.10
-            - history.leaderDamage() * 0.14;
-        int height = (int)Math.round(base * competitionStretch * stressReduction);
-        return Math.max(5, Math.min(quality.budget().maxHeight(), height));
+        int previous = -1;
+        double startX = 0.0;
+        double startY = 0.0;
+        double startZ = 0.0;
+
+        for (int section = 0; section < trunk.sections(); section++) {
+            double t0 = section / (double)trunk.sections();
+            double t1 = (section + 1.0) / trunk.sections();
+            double endX = trunk.leanX() * t1 * t1;
+            double endY = trunk.height() * t1;
+            double endZ = trunk.leanZ() * t1 * t1;
+            int id = segments.size();
+            segments.add(new BranchGraph.Segment(
+                id,
+                previous,
+                startX,
+                startY,
+                startZ,
+                endX,
+                endY,
+                endZ,
+                trunk.radiusAt(t0),
+                trunk.radiusAt(t1),
+                false
+            ));
+            previous = id;
+            startX = endX;
+            startY = endY;
+            startZ = endZ;
+        }
+        return segments.size();
     }
 
-    private static double radiusFor(
-        TreeQualityTier quality,
-        TreeLifeHistory history
+    private static int appendRoots(
+        List<BranchGraph.Segment> segments,
+        RootPlan roots,
+        TrunkPlan trunk,
+        int nextId,
+        int budget
     ) {
-        double base = switch (quality) {
-            case BASIC -> 0.72;
-            case MID -> 1.18;
-            case HERO -> 1.85;
+        for (RootPlan.RootArm root : roots.arms()) {
+            if (nextId >= budget) {
+                break;
+            }
+            double startRadius = Math.min(
+                trunk.baseRadius(),
+                root.startRadius() + roots.buttressRadius()
+            );
+            segments.add(new BranchGraph.Segment(
+                nextId,
+                0,
+                0.0,
+                0.10,
+                0.0,
+                root.endX(),
+                root.endY(),
+                root.endZ(),
+                startRadius,
+                root.endRadius(),
+                true
+            ));
+            nextId++;
+        }
+        return nextId;
+    }
+
+    private static int appendBranchFamilies(
+        List<BranchGraph.Segment> segments,
+        BranchFamilyPlan plan,
+        TrunkPlan trunk,
+        TreeEnvironment environment,
+        TreeLifeHistory history,
+        long seed,
+        int nextId,
+        int budget
+    ) {
+        long state = TreeLifeHistory.mix(seed ^ 0x414E41544F4D594CL);
+        int familyOrdinal = 0;
+
+        for (BranchFamilyPlan.Family family : plan.families()) {
+            for (int index = 0;
+                 index < family.targetCount() && nextId < budget;
+                 index++) {
+                state = TreeLifeHistory.mix(state ^ nextId);
+                double vertical = family.verticalAt(index, seed);
+                double lossRoll = TreeLifeHistory.unit(state);
+                if (family.foliageBearing()
+                    && lossRoll < history.crownLoss() * 0.30) {
+                    continue;
+                }
+
+                double countDivisor = Math.max(1.0, family.targetCount());
+                double angle = family.phase()
+                    + index * GOLDEN_ANGLE
+                    + familyOrdinal * 0.43
+                    + (TreeLifeHistory.unit(TreeLifeHistory.mix(state)) - 0.5) * 0.46;
+
+                double bandPosition = normalizedBandPosition(family, vertical);
+                double familyShape = familyLengthShape(family.kind(), bandPosition);
+                double length = family.baseLength()
+                    * familyShape
+                    * (0.78 + TreeLifeHistory.unit(state) * 0.42)
+                    * (0.80 + history.vigor() * 0.25);
+
+                double windProjection = environment.windX() * Math.cos(angle)
+                    + environment.windZ() * Math.sin(angle);
+                double openProjection = environment.openSpaceX() * Math.cos(angle)
+                    + environment.openSpaceZ() * Math.sin(angle);
+                length *= clamp(
+                    1.0 + windProjection * 0.22 + openProjection * 0.12,
+                    0.52,
+                    1.36
+                );
+
+                double attachX = trunk.leanX() * vertical * vertical;
+                double attachY = trunk.height() * vertical;
+                double attachZ = trunk.leanZ() * vertical * vertical;
+                double radialX = Math.cos(angle) * length;
+                double radialZ = Math.sin(angle) * length;
+                double verticalOffset = length * family.upwardLift()
+                    - length * family.droop()
+                    * (0.72 + vertical * 0.38);
+
+                boolean dead = !family.foliageBearing()
+                    || TreeLifeHistory.unit(
+                        TreeLifeHistory.mix(state ^ 0x444541444252414EL)
+                    ) < family.deadProbability();
+                double startRadius = Math.max(
+                    0.20,
+                    trunk.radiusAt(vertical)
+                        * branchThickness(family.kind())
+                );
+                double endRadius = dead
+                    ? 0.0
+                    : Math.max(0.07, startRadius * 0.24);
+
+                segments.add(new BranchGraph.Segment(
+                    nextId,
+                    trunkParentFor(vertical, trunk.sections()),
+                    attachX,
+                    attachY,
+                    attachZ,
+                    attachX + radialX,
+                    attachY + verticalOffset,
+                    attachZ + radialZ,
+                    startRadius,
+                    endRadius,
+                    dead
+                ));
+                nextId++;
+
+                if (shouldAddSecondaryBranch(
+                    family, qualityFromBudget(budget), index, countDivisor, state
+                ) && nextId < budget) {
+                    double sideAngle = angle
+                        + (TreeLifeHistory.unit(TreeLifeHistory.mix(state ^ 91L)) > 0.5
+                            ? 0.62 : -0.62);
+                    double secondaryLength = length * 0.42;
+                    double branchEndX = attachX + radialX;
+                    double branchEndY = attachY + verticalOffset;
+                    double branchEndZ = attachZ + radialZ;
+                    segments.add(new BranchGraph.Segment(
+                        nextId,
+                        nextId - 1,
+                        branchEndX,
+                        branchEndY,
+                        branchEndZ,
+                        branchEndX + Math.cos(sideAngle) * secondaryLength,
+                        branchEndY - secondaryLength * family.droop() * 0.45,
+                        branchEndZ + Math.sin(sideAngle) * secondaryLength,
+                        Math.max(0.10, startRadius * 0.32),
+                        dead ? 0.0 : 0.05,
+                        dead
+                    ));
+                    nextId++;
+                }
+            }
+            familyOrdinal++;
+        }
+        return nextId;
+    }
+
+    private static void appendSecondaryLeader(
+        List<BranchGraph.Segment> segments,
+        TrunkPlan trunk,
+        TreeEnvironment environment,
+        TreeLifeHistory history,
+        int nextId,
+        int budget
+    ) {
+        if (!trunk.secondaryLeader() || nextId >= budget) {
+            return;
+        }
+        double split = trunk.secondaryLeaderStart();
+        double startX = trunk.leanX() * split * split;
+        double startY = trunk.height() * split;
+        double startZ = trunk.leanZ() * split * split;
+        double direction = history.trunkLean() >= 0.0 ? -1.0 : 1.0;
+        double endVertical = clamp(
+            0.90 - history.leaderDamage() * 0.10,
+            split + 0.12,
+            0.94
+        );
+        segments.add(new BranchGraph.Segment(
+            nextId,
+            trunkParentFor(split, trunk.sections()),
+            startX,
+            startY,
+            startZ,
+            startX + direction * trunk.height() * 0.12,
+            trunk.height() * endVertical,
+            startZ + environment.openSpaceZ() * trunk.height() * 0.07,
+            Math.max(0.24, trunk.radiusAt(split) * 0.60),
+            0.10,
+            false
+        ));
+    }
+
+    private static double normalizedBandPosition(
+        BranchFamilyPlan.Family family,
+        double vertical
+    ) {
+        return clamp(
+            (vertical - family.minVertical())
+                / (family.maxVertical() - family.minVertical()),
+            0.0,
+            1.0
+        );
+    }
+
+    private static double familyLengthShape(
+        BranchFamilyPlan.Kind kind,
+        double t
+    ) {
+        return switch (kind) {
+            case LOWER_SPARSE -> 0.78 + (1.0 - t) * 0.20;
+            case MIDDLE_STRUCTURAL -> 0.78 + Math.sin(t * Math.PI) * 0.28;
+            case UPPER_SHORT -> 1.0 - t * 0.34;
+            case DEAD_AND_DAMAGED -> 0.72 + (1.0 - t) * 0.16;
         };
-        return base * (0.82 + history.vigor() * 0.24);
+    }
+
+    private static double branchThickness(BranchFamilyPlan.Kind kind) {
+        return switch (kind) {
+            case LOWER_SPARSE -> 0.40;
+            case MIDDLE_STRUCTURAL -> 0.46;
+            case UPPER_SHORT -> 0.34;
+            case DEAD_AND_DAMAGED -> 0.30;
+        };
+    }
+
+    private static boolean shouldAddSecondaryBranch(
+        BranchFamilyPlan.Family family,
+        TreeQualityTier quality,
+        int index,
+        double countDivisor,
+        long state
+    ) {
+        if (family.kind() != BranchFamilyPlan.Kind.MIDDLE_STRUCTURAL
+            || quality == TreeQualityTier.BASIC) {
+            return false;
+        }
+        double chance = quality == TreeQualityTier.HERO ? 0.52 : 0.26;
+        chance *= 0.90 + index / countDivisor * 0.20;
+        return TreeLifeHistory.unit(TreeLifeHistory.mix(state ^ 0x5345434F4E444152L))
+            < chance;
+    }
+
+    private static TreeQualityTier qualityFromBudget(int budget) {
+        if (budget == TreeQualityTier.HERO.budget().maxBranchSegments()) {
+            return TreeQualityTier.HERO;
+        }
+        if (budget == TreeQualityTier.MID.budget().maxBranchSegments()) {
+            return TreeQualityTier.MID;
+        }
+        return TreeQualityTier.BASIC;
     }
 
     private static int trunkParentFor(double vertical, int trunkSections) {
