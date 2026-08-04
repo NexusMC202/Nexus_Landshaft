@@ -3,6 +3,7 @@ package dev.nexusmc.landscape;
 import dev.nexusmc.landscape.command.ClimateAuditCommand;
 import dev.nexusmc.landscape.command.RouteAuditCommand;
 import dev.nexusmc.landscape.command.Stage6Command;
+import dev.nexusmc.landscape.command.TreeDebugCommand;
 import dev.nexusmc.landscape.diagnostics.WorldgenSurvey;
 import dev.nexusmc.landscape.worldgen.CaveSanctumFeature;
 import dev.nexusmc.landscape.worldgen.CoralAtollFeature;
@@ -73,5 +74,6 @@ public final class NexusLandscape {
         ClimateAuditCommand.register(event.getDispatcher());
         RouteAuditCommand.register(event.getDispatcher());
         Stage6Command.register(event.getDispatcher());
+        TreeDebugCommand.register(event.getDispatcher());
     }
 }
