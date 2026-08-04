@@ -80,7 +80,7 @@ public final class ProceduralTreeRuntime {
             BlockPos position = absolute(base, voxel);
             if (!withinBuildHeight(level, position)
                 || !level.getFluidState(position).isEmpty()
-                || !level.getBlockState(position).canBeReplaced()) {
+                || !woodPositionAvailable(level, position, voxel.y())) {
                 return false;
             }
         }
@@ -93,6 +93,31 @@ public final class ProceduralTreeRuntime {
             }
         }
         return true;
+    }
+
+    private static boolean woodPositionAvailable(
+        WorldGenLevel level,
+        BlockPos position,
+        int relativeY
+    ) {
+        BlockState state = level.getBlockState(position);
+        if (state.canBeReplaced()) {
+            return true;
+        }
+        return relativeY < 0 && naturalRootSoil(state);
+    }
+
+    private static boolean naturalRootSoil(BlockState state) {
+        return state.is(Blocks.DIRT)
+            || state.is(Blocks.GRASS_BLOCK)
+            || state.is(Blocks.PODZOL)
+            || state.is(Blocks.COARSE_DIRT)
+            || state.is(Blocks.ROOTED_DIRT)
+            || state.is(Blocks.MYCELIUM)
+            || state.is(Blocks.MOSS_BLOCK)
+            || state.is(Blocks.MUD)
+            || state.is(Blocks.MUDDY_MANGROVE_ROOTS)
+            || state.is(Blocks.SNOW_BLOCK);
     }
 
     private static boolean withinBuildHeight(WorldGenLevel level, BlockPos position) {
