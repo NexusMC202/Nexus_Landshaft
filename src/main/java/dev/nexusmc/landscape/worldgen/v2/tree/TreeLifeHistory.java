@@ -53,13 +53,13 @@ public record TreeLifeHistory(
         double stress = clamp01(
             environment.slope() * 0.28
                 + environment.windStrength() * 0.32
-                + environment.competition() * 0.22
+                + environment.forestCompetition() * 0.22
                 + (1.0 - environment.soilMoisture()) * 0.18
         );
         double vigor = clamp01(
             0.86
                 + environment.soilMoisture() * 0.18
-                - environment.competition() * 0.24
+                - environment.forestCompetition() * 0.24
                 - stress * 0.20
         );
         double crownLoss = clamp01(stress * (0.18 + damageRoll * 0.38));
