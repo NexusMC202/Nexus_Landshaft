@@ -161,10 +161,18 @@ tasks.register('riverWidthPolicyTest', JavaExec) {
     mainClass = 'dev.nexusmc.landscape.worldgen.v2.hydrology.RiverWidthPolicySelfTest'
 }
 
+tasks.register('treeModelFoundationTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks tree budgets, environment inputs, branch graphs and voxel models.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.tree.TreeModelFoundationSelfTest'
+}
+
 tasks.named('check') {
     dependsOn regionalFieldTest, stage6SurfaceTest, stage6VegetationTest,
         stage6CommandTest, boundedCacheTest, stage6ProfilerTest,
         surfaceNoiseTest, surfaceSelectionTest, surfaceContextTest,
         surfaceProfileInvariantTest, climateRouterRangeTest,
-        riverWidthPolicyTest
+        riverWidthPolicyTest, treeModelFoundationTest
 }
