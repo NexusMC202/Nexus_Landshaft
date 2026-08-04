@@ -37,9 +37,8 @@ public record SurfaceContext(
     double materialNoise
 ) {
     public SurfaceContext {
-        if (biomeKey == null || terrainProvince == null) {
-            throw new IllegalArgumentException("biome/province cannot be null");
-        }
+        biomeKey = requireText(biomeKey, "biomeKey");
+        terrainProvince = requireText(terrainProvince, "terrainProvince");
         requireFinite(temperature, "temperature");
         requireFinite(humidity, "humidity");
         requireFinite(continentalness, "continentalness");
@@ -83,6 +82,15 @@ public record SurfaceContext(
         return alpineInfluence >= 0.5
             || elevation >= 150.0
             || glacierWeight >= 0.55;
+    }
+
+    private static String requireText(String value, String description) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(
+                description + " cannot be null or blank"
+            );
+        }
+        return value;
     }
 
     private static double unit(double value, String description) {
