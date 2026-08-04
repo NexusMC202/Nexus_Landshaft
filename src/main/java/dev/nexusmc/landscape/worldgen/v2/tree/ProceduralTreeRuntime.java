@@ -92,7 +92,9 @@ public final class ProceduralTreeRuntime {
         BranchGraph graph = SpeciesConiferBranchGenerator.generate(
             seed, species, quality, environment, history
         );
-        VoxelTreeModel model = TreeVoxelizer.voxelize(graph, quality, seed);
+        VoxelTreeModel model = TreeVoxelizer.voxelize(
+            graph, quality, seed, species
+        );
         if (!canPlace(level, base, model)) {
             return false;
         }
