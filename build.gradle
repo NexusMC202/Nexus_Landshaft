@@ -141,9 +141,17 @@ tasks.register('surfaceProfileInvariantTest', JavaExec) {
     mainClass = 'dev.nexusmc.landscape.worldgen.v2.surface.SurfaceProfileInvariantSelfTest'
 }
 
+tasks.register('climateRouterRangeTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks that climate router resources retain hot, cold, wet and dry reachability.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.field.ClimateRouterRangeSelfTest'
+}
+
 tasks.named('check') {
     dependsOn regionalFieldTest, stage6SurfaceTest, stage6VegetationTest,
         stage6CommandTest, boundedCacheTest, stage6ProfilerTest,
         surfaceNoiseTest, surfaceSelectionTest, surfaceContextTest,
-        surfaceProfileInvariantTest
+        surfaceProfileInvariantTest, climateRouterRangeTest
 }
