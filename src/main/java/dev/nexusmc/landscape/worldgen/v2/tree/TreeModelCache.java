@@ -16,6 +16,10 @@ public final class TreeModelCache {
     }
 
     public static VoxelTreeModel getOrCreate(ProceduralTreePlan plan) {
+        return getOrCreateDetailed(plan).model();
+    }
+
+    public static Lookup getOrCreateDetailed(ProceduralTreePlan plan) {
         if (plan == null) {
             throw new IllegalArgumentException("tree plan is required");
         }
@@ -23,7 +27,7 @@ public final class TreeModelCache {
         VoxelTreeModel cached = MODELS.get(key);
         if (cached != null) {
             HITS.increment();
-            return cached;
+            return new Lookup(cached, true);
         }
         MISSES.increment();
 
@@ -45,7 +49,7 @@ public final class TreeModelCache {
         );
         MODELS.put(key, generated);
         VoxelTreeModel admitted = MODELS.get(key);
-        return admitted != null ? admitted : generated;
+        return new Lookup(admitted != null ? admitted : generated, false);
     }
 
     public static Snapshot snapshot() {
@@ -69,6 +73,14 @@ public final class TreeModelCache {
         MODELS.clear();
         HITS.reset();
         MISSES.reset();
+    }
+
+    public record Lookup(VoxelTreeModel model, boolean cacheHit) {
+        public Lookup {
+            if (model == null) {
+                throw new IllegalArgumentException("tree model is required");
+            }
+        }
     }
 
     public record Snapshot(
