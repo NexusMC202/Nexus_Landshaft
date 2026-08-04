@@ -94,7 +94,10 @@ public record BranchGraph(List<Segment> segments) {
                 || endRadius > startRadius) {
                 throw new IllegalArgumentException("invalid branch radii");
             }
-            if (length() < 0.25) {
+            double dx = endX - startX;
+            double dy = endY - startY;
+            double dz = endZ - startZ;
+            if (Math.sqrt(square(dx) + square(dy) + square(dz)) < 0.25) {
                 throw new IllegalArgumentException("branch segment is too short");
             }
         }
