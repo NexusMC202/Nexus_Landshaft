@@ -153,9 +153,18 @@ tasks.register('climateRouterRangeTest', JavaExec) {
     mainClass = 'dev.nexusmc.landscape.worldgen.v2.field.ClimateRouterRangeSelfTest'
 }
 
+tasks.register('riverWidthPolicyTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks stream-order widths, masks and legacy large-river compatibility.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.hydrology.RiverWidthPolicySelfTest'
+}
+
 tasks.named('check') {
     dependsOn regionalFieldTest, stage6SurfaceTest, stage6VegetationTest,
         stage6CommandTest, boundedCacheTest, stage6ProfilerTest,
         surfaceNoiseTest, surfaceSelectionTest, surfaceContextTest,
-        surfaceProfileInvariantTest, climateRouterRangeTest
+        surfaceProfileInvariantTest, climateRouterRangeTest,
+        riverWidthPolicyTest
 }
