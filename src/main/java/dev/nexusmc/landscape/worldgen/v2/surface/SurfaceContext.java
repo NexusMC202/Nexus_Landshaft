@@ -47,7 +47,7 @@ public record SurfaceContext(
         requireFinite(weirdness, "weirdness");
         requireFinite(elevation, "elevation");
         normalizedHeight = unit(normalizedHeight, "normalizedHeight");
-        requireFinite(slope, "slope");
+        slope = unit(slope, "slope");
         requireFinite(riverDistance, "riverDistance");
         riverMask = unit(riverMask, "riverMask");
         riverInfluence = unit(riverInfluence, "riverInfluence");
@@ -64,9 +64,6 @@ public record SurfaceContext(
         archipelagoWeight = unit(archipelagoWeight, "archipelagoWeight");
         localNoise = unit(localNoise, "localNoise");
         materialNoise = unit(materialNoise, "materialNoise");
-        if (slope < 0.0) {
-            throw new IllegalArgumentException("slope cannot be negative");
-        }
     }
 
     public boolean activeChannel() {
