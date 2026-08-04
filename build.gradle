@@ -102,13 +102,23 @@ tasks.register('boundedCacheTest', JavaExec) {
 
 tasks.register('stage6ProfilerTest', JavaExec) {
     group = 'verification'
-    description = 'Checks Stage 6 histogram percentiles and reset behavior.'
+    description = 'Checks Stage 6 aggregate profiler percentile and reset behavior.'
     dependsOn testClasses
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'dev.nexusmc.landscape.diagnostics.Stage6ProfilerSelfTest'
+    environment 'NEXUS_LANDSCAPE_PROFILE', '1'
+}
+
+tasks.register('surfaceNoiseTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks deterministic surface noise, range and scale validation.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.surface.SurfaceNoiseSelfTest'
 }
 
 tasks.named('check') {
     dependsOn regionalFieldTest, stage6SurfaceTest, stage6VegetationTest,
-        stage6CommandTest, boundedCacheTest, stage6ProfilerTest
+        stage6CommandTest, boundedCacheTest, stage6ProfilerTest,
+        surfaceNoiseTest
 }
