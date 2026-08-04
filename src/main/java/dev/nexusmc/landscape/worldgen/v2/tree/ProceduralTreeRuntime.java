@@ -27,6 +27,23 @@ public final class ProceduralTreeRuntime {
     public static boolean placeConifer(
         WorldGenLevel level,
         BlockPos base,
+        ProceduralTreePlan plan
+    ) {
+        if (plan == null) {
+            throw new IllegalArgumentException("tree plan is required");
+        }
+        return placeConifer(
+            level,
+            base,
+            plan.seed(),
+            plan.quality(),
+            plan.environment()
+        );
+    }
+
+    public static boolean placeConifer(
+        WorldGenLevel level,
+        BlockPos base,
         long seed,
         TreeQualityTier quality,
         TreeEnvironment environment
