@@ -10,6 +10,8 @@ public record VoxelTreeModel(
     List<Voxel> wood,
     List<Voxel> leaves
 ) {
+    public static final int MIN_ROOT_Y = -2;
+
     public VoxelTreeModel {
         if (quality == null) {
             throw new IllegalArgumentException("quality is null");
@@ -35,13 +37,13 @@ public record VoxelTreeModel(
         }
         Set<Voxel> occupied = new HashSet<>();
         for (Voxel voxel : wood) {
-            validateBounds(voxel, budget);
+            validateBounds(voxel, budget, true);
             if (!occupied.add(voxel)) {
                 throw new IllegalArgumentException("duplicate wood voxel: " + voxel);
             }
         }
         for (Voxel voxel : leaves) {
-            validateBounds(voxel, budget);
+            validateBounds(voxel, budget, false);
             if (!occupied.add(voxel)) {
                 throw new IllegalArgumentException("overlapping voxel: " + voxel);
             }
@@ -50,13 +52,15 @@ public record VoxelTreeModel(
 
     private static void validateBounds(
         Voxel voxel,
-        TreeQualityTier.TreeBudget budget
+        TreeQualityTier.TreeBudget budget,
+        boolean wood
     ) {
         if (Math.abs(voxel.x()) > budget.maxHorizontalRadius()
             || Math.abs(voxel.z()) > budget.maxHorizontalRadius()) {
             throw new IllegalArgumentException("horizontal tree budget exceeded");
         }
-        if (voxel.y() < 0 || voxel.y() > budget.maxHeight()) {
+        int minimumY = wood ? MIN_ROOT_Y : 0;
+        if (voxel.y() < minimumY || voxel.y() > budget.maxHeight()) {
             throw new IllegalArgumentException("vertical tree budget exceeded");
         }
     }
