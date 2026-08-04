@@ -77,6 +77,7 @@ public final class ProceduralTreeIntegration {
             worldSeed,
             base.getX(),
             base.getZ(),
+            shape,
             oldGrowth,
             oldGrowthDensity,
             slope,
