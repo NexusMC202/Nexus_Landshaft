@@ -90,6 +90,19 @@ public final class ProceduralTreeIntegration {
             openSpaceZ,
             base.getY() - 1
         );
+        if (!TreeRegionalQuotaPolicy.allows(
+            worldSeed,
+            base.getX(),
+            base.getZ(),
+            plan.quality()
+        )) {
+            return new Outcome(
+                Result.QUOTA_REJECTED,
+                plan.quality(),
+                plan.fingerprint()
+            );
+        }
+
         Result result = ProceduralTreeRuntime.placeConifer(level, base, plan)
             ? Result.PLACED
             : Result.COLLISION;
@@ -105,7 +118,9 @@ public final class ProceduralTreeIntegration {
             if (result == null) {
                 throw new IllegalArgumentException("result is required");
             }
-            if ((result == Result.PLACED || result == Result.COLLISION)
+            if ((result == Result.PLACED
+                || result == Result.COLLISION
+                || result == Result.QUOTA_REJECTED)
                 && quality == null) {
                 throw new IllegalArgumentException(
                     "runtime outcomes require a quality tier"
@@ -121,11 +136,12 @@ public final class ProceduralTreeIntegration {
     public enum Result {
         PLACED,
         COLLISION,
+        QUOTA_REJECTED,
         DISABLED,
         UNSUPPORTED;
 
         public boolean shouldFallback() {
-            return this != PLACED;
+            return this != PLACED && this != QUOTA_REJECTED;
         }
     }
 }
