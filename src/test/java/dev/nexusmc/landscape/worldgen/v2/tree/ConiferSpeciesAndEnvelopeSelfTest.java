@@ -15,6 +15,7 @@ public final class ConiferSpeciesAndEnvelopeSelfTest {
         verifyEnvelopeContract();
         verifyRegionalQuotas();
         verifyBoundedModelCache();
+        verifyRuntimeTelemetry();
         System.out.println("ConiferSpeciesAndEnvelopeSelfTest: PASS");
     }
 
@@ -188,6 +189,62 @@ public final class ConiferSpeciesAndEnvelopeSelfTest {
             "second plan must add one cache entry");
         TreeModelCache.clear();
         require(TreeModelCache.size() == 0, "tree cache clear failed");
+    }
+
+    private static void verifyRuntimeTelemetry() {
+        TreeRuntimeTelemetry.reset();
+        TreeRuntimeTelemetry.record(new ProceduralTreeIntegration.Outcome(
+            ProceduralTreeIntegration.Result.PLACED,
+            TreeQualityTier.MID,
+            11L,
+            true,
+            true
+        ));
+        TreeRuntimeTelemetry.record(new ProceduralTreeIntegration.Outcome(
+            ProceduralTreeIntegration.Result.COLLISION,
+            TreeQualityTier.BASIC,
+            12L,
+            true,
+            false
+        ));
+        TreeRuntimeTelemetry.record(
+            ProceduralTreeIntegration.Outcome.withoutLookup(
+                ProceduralTreeIntegration.Result.QUOTA_REJECTED,
+                TreeQualityTier.HERO,
+                13L
+            )
+        );
+
+        TreeRuntimeTelemetry.Snapshot snapshot =
+            TreeRuntimeTelemetry.snapshot();
+        require(snapshot.attempts() == 3L,
+            "tree telemetry attempt count mismatch");
+        require(snapshot.placed() == 1L,
+            "tree telemetry placed count mismatch");
+        require(snapshot.collisions() == 1L,
+            "tree telemetry collision count mismatch");
+        require(snapshot.quotaRejected() == 1L,
+            "tree telemetry quota count mismatch");
+        require(snapshot.cacheHits() == 1L,
+            "tree telemetry cache hit mismatch");
+        require(snapshot.cacheMisses() == 1L,
+            "tree telemetry cache miss mismatch");
+        require(snapshot.cacheLookupSkipped() == 1L,
+            "tree telemetry skipped lookup mismatch");
+        require(snapshot.cacheLookups() == 2L,
+            "tree telemetry lookup total mismatch");
+        require(Math.abs(snapshot.cacheHitRate() - 0.5) < 1.0E-12,
+            "tree telemetry hit rate mismatch");
+        require(snapshot.asProperties().contains(
+            "vegetation.tree_v2.quota_rejected=1"
+        ), "tree telemetry properties omit quota count");
+
+        TreeRuntimeTelemetry.Snapshot resetSnapshot =
+            TreeRuntimeTelemetry.snapshotAndReset();
+        require(resetSnapshot.attempts() == 3L,
+            "snapshotAndReset lost tree telemetry");
+        require(TreeRuntimeTelemetry.snapshot().attempts() == 0L,
+            "tree telemetry reset failed");
     }
 
     private static ProceduralTreePlan planAt(int x, int z) {
