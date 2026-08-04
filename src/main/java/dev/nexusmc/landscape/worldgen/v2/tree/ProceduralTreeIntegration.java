@@ -64,10 +64,10 @@ public final class ProceduralTreeIntegration {
         double openSpaceZ
     ) {
         if (!ProceduralTreePolicy.supports(shape)) {
-            return new Outcome(Result.UNSUPPORTED, null, 0L);
+            return Outcome.withoutLookup(Result.UNSUPPORTED, null, 0L);
         }
         if (!ProceduralTreeRuntime.enabled()) {
-            return new Outcome(Result.DISABLED, null, 0L);
+            return Outcome.withoutLookup(Result.DISABLED, null, 0L);
         }
         if (level == null || base == null) {
             throw new IllegalArgumentException("level and base are required");
@@ -96,23 +96,31 @@ public final class ProceduralTreeIntegration {
             base.getZ(),
             plan.quality()
         )) {
-            return new Outcome(
+            return Outcome.withoutLookup(
                 Result.QUOTA_REJECTED,
                 plan.quality(),
                 plan.fingerprint()
             );
         }
 
-        Result result = ProceduralTreeRuntime.placeConifer(level, base, plan)
-            ? Result.PLACED
-            : Result.COLLISION;
-        return new Outcome(result, plan.quality(), plan.fingerprint());
+        ProceduralTreeRuntime.Placement placement =
+            ProceduralTreeRuntime.placeConiferDetailed(level, base, plan);
+        Result result = placement.placed() ? Result.PLACED : Result.COLLISION;
+        return new Outcome(
+            result,
+            plan.quality(),
+            plan.fingerprint(),
+            true,
+            placement.cacheHit()
+        );
     }
 
     public record Outcome(
         Result result,
         TreeQualityTier quality,
-        long planFingerprint
+        long planFingerprint,
+        boolean cacheLookupPerformed,
+        boolean cacheHit
     ) {
         public Outcome {
             if (result == null) {
@@ -126,6 +134,29 @@ public final class ProceduralTreeIntegration {
                     "runtime outcomes require a quality tier"
                 );
             }
+            if (cacheHit && !cacheLookupPerformed) {
+                throw new IllegalArgumentException(
+                    "cache hit requires a performed lookup"
+                );
+            }
+        }
+
+        public static Outcome withoutLookup(
+            Result result,
+            TreeQualityTier quality,
+            long planFingerprint
+        ) {
+            return new Outcome(
+                result,
+                quality,
+                planFingerprint,
+                false,
+                false
+            );
+        }
+
+        public boolean cacheMiss() {
+            return cacheLookupPerformed && !cacheHit;
         }
 
         public boolean shouldFallback() {
