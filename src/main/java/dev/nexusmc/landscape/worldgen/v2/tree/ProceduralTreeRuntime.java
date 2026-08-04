@@ -30,11 +30,19 @@ public final class ProceduralTreeRuntime {
         BlockPos base,
         ProceduralTreePlan plan
     ) {
+        return placeConiferDetailed(level, base, plan).placed();
+    }
+
+    public static Placement placeConiferDetailed(
+        WorldGenLevel level,
+        BlockPos base,
+        ProceduralTreePlan plan
+    ) {
         if (plan == null) {
             throw new IllegalArgumentException("tree plan is required");
         }
         if (!enabled()) {
-            return false;
+            return new Placement(false, false);
         }
         requireRuntimeInputs(
             level,
@@ -45,15 +53,16 @@ public final class ProceduralTreeRuntime {
             plan.envelope()
         );
         if (!canFitEnvelope(level, base, plan.envelope())) {
-            return false;
+            return new Placement(false, false);
         }
 
-        VoxelTreeModel model = TreeModelCache.getOrCreate(plan);
+        TreeModelCache.Lookup lookup = TreeModelCache.getOrCreateDetailed(plan);
+        VoxelTreeModel model = lookup.model();
         if (!canPlace(level, base, model)) {
-            return false;
+            return new Placement(false, lookup.cacheHit());
         }
         placeModel(level, base, model);
-        return true;
+        return new Placement(true, lookup.cacheHit());
     }
 
     /** Compatibility overload for older tests and callers; resolves as spruce. */
@@ -301,5 +310,8 @@ public final class ProceduralTreeRuntime {
         VoxelTreeModel.Voxel voxel
     ) {
         return base.offset(voxel.x(), voxel.y(), voxel.z());
+    }
+
+    public record Placement(boolean placed, boolean cacheHit) {
     }
 }
