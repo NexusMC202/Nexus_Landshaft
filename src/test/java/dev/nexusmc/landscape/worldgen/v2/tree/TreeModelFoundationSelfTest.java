@@ -9,14 +9,15 @@ public final class TreeModelFoundationSelfTest {
     private TreeModelFoundationSelfTest() {
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         verifyBudgets();
         verifyEnvironment();
         verifyGraph();
         verifyVoxelModel();
         verifyLifeHistory();
         verifyConiferGenerator();
-        verifyTreeVoxelizer();
+        verifyVoxelizer();
+        TreePreviewExport.main(new String[0]);
         System.out.println("TreeModelFoundationSelfTest: PASS");
     }
 
@@ -146,33 +147,40 @@ public final class TreeModelFoundationSelfTest {
         }
     }
 
-    private static void verifyTreeVoxelizer() {
+    private static void verifyVoxelizer() {
         TreeEnvironment environment = environment();
         for (TreeQualityTier quality : TreeQualityTier.values()) {
-            long seed = 0x7AEE5EEDL + quality.ordinal();
-            TreeLifeHistory history = TreeLifeHistory.generate(seed, quality, environment);
+            long seed = 0x7A11C0DEL + quality.ordinal();
+            TreeLifeHistory history = TreeLifeHistory.generate(
+                seed, quality, environment
+            );
             BranchGraph graph = ConiferBranchGenerator.generate(
                 seed, quality, environment, history
             );
-            VoxelTreeModel first = TreeVoxelizer.voxelize(graph, quality, seed);
-            VoxelTreeModel second = TreeVoxelizer.voxelize(graph, quality, seed);
+            VoxelTreeModel first = TreeVoxelizer.voxelize(seed, quality, graph);
+            VoxelTreeModel second = TreeVoxelizer.voxelize(seed, quality, graph);
             require(first.fingerprint() == second.fingerprint(),
-                quality + " voxelization is not deterministic");
-            require(!first.leaves().isEmpty(), quality + " tree has no foliage");
+                quality + " voxelizer is not deterministic");
+            require(!first.leaves().isEmpty(),
+                quality + " conifer has no foliage");
             require(first.wood().size() <= quality.budget().maxWoodBlocks(),
                 quality + " wood budget exceeded");
             require(first.leaves().size() <= quality.budget().maxLeafBlocks(),
                 quality + " leaf budget exceeded");
-            require(connected(first.wood()), quality + " wood is disconnected");
-            require(disjoint(first.wood(), first.leaves()),
-                quality + " foliage overlaps wood");
+            require(connected(first.wood()),
+                quality + " wood is not a connected structure");
+            Set<VoxelTreeModel.Voxel> wood = new HashSet<>(first.wood());
+            for (VoxelTreeModel.Voxel leaf : first.leaves()) {
+                require(!wood.contains(leaf),
+                    quality + " leaf overlaps wood: " + leaf);
+            }
         }
     }
 
     private static boolean connected(List<VoxelTreeModel.Voxel> voxels) {
         Set<VoxelTreeModel.Voxel> remaining = new HashSet<>(voxels);
         ArrayDeque<VoxelTreeModel.Voxel> queue = new ArrayDeque<>();
-        VoxelTreeModel.Voxel first = remaining.iterator().next();
+        VoxelTreeModel.Voxel first = voxels.getFirst();
         remaining.remove(first);
         queue.add(first);
         while (!queue.isEmpty()) {
@@ -184,29 +192,18 @@ public final class TreeModelFoundationSelfTest {
                             continue;
                         }
                         VoxelTreeModel.Voxel neighbor = new VoxelTreeModel.Voxel(
-                            current.x() + dx, current.y() + dy, current.z() + dz
+                            current.x() + dx,
+                            current.y() + dy,
+                            current.z() + dz
                         );
                         if (remaining.remove(neighbor)) {
-                            queue.addLast(neighbor);
+                            queue.add(neighbor);
                         }
                     }
                 }
             }
         }
         return remaining.isEmpty();
-    }
-
-    private static boolean disjoint(
-        List<VoxelTreeModel.Voxel> wood,
-        List<VoxelTreeModel.Voxel> leaves
-    ) {
-        Set<VoxelTreeModel.Voxel> occupied = new HashSet<>(wood);
-        for (VoxelTreeModel.Voxel leaf : leaves) {
-            if (!occupied.add(leaf)) {
-                return false;
-            }
-        }
-        return true;
     }
 
     private static TreeEnvironment environment() {
