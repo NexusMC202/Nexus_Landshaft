@@ -12,6 +12,10 @@ base {
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
+dependencies {
+    testImplementation 'com.google.code.gson:gson:2.11.0'
+}
+
 neoForge {
     version = neo_version
 
@@ -141,9 +145,26 @@ tasks.register('surfaceProfileInvariantTest', JavaExec) {
     mainClass = 'dev.nexusmc.landscape.worldgen.v2.surface.SurfaceProfileInvariantSelfTest'
 }
 
+tasks.register('climateRouterRangeTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks that climate router resources retain hot, cold, wet and dry reachability.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.field.ClimateRouterRangeSelfTest'
+}
+
+tasks.register('riverWidthPolicyTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks stream-order widths, masks and legacy large-river compatibility.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.hydrology.RiverWidthPolicySelfTest'
+}
+
 tasks.named('check') {
     dependsOn regionalFieldTest, stage6SurfaceTest, stage6VegetationTest,
         stage6CommandTest, boundedCacheTest, stage6ProfilerTest,
         surfaceNoiseTest, surfaceSelectionTest, surfaceContextTest,
-        surfaceProfileInvariantTest
+        surfaceProfileInvariantTest, climateRouterRangeTest,
+        riverWidthPolicyTest
 }

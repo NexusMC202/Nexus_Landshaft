@@ -1,5 +1,6 @@
 package dev.nexusmc.landscape;
 
+import dev.nexusmc.landscape.command.ClimateAuditCommand;
 import dev.nexusmc.landscape.command.RouteAuditCommand;
 import dev.nexusmc.landscape.command.Stage6Command;
 import dev.nexusmc.landscape.diagnostics.WorldgenSurvey;
@@ -69,6 +70,7 @@ public final class NexusLandscape {
     }
 
     private void registerCommands(RegisterCommandsEvent event) {
+        ClimateAuditCommand.register(event.getDispatcher());
         RouteAuditCommand.register(event.getDispatcher());
         Stage6Command.register(event.getDispatcher());
     }

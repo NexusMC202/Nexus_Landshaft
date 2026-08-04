@@ -28,20 +28,34 @@ public final class VegetationResolver {
             profile.treeLineY() + 8.0,
             surface.surfaceY()
         );
-        double riverFactor = 1.0 - smoothstep(
-            0.10,
-            0.42,
-            Math.max(surface.riverMask(), surface.riverInfluence())
+        double riverPresence = Math.max(
+            surface.riverMask(),
+            surface.riverInfluence()
         );
+        double channelClearance = 1.0 - smoothstep(
+            0.34,
+            0.68,
+            riverPresence
+        );
+        double riparianBoost = surface.wetBank()
+            && riverPresence < 0.34
+            ? 1.38
+            : 1.0;
+        double lowlandBoost = 0.82
+            + (1.0 - surface.normalizedHeight()) * 0.34;
+        double forestCluster = 0.16
+            + context.forestCore() * context.forestCore() * 0.84;
         double clearingFactor = context.clearingNoise() < profile.clearingShare()
-            ? 0.08
+            ? 0.06
             : 1.0;
         double wetBoost = 0.72 + surface.groundwater() * 0.45;
         double tree = (terrestrial ? profile.treeDensity() : 0.0)
-            * (0.30 + context.forestCore() * 0.70)
+            * forestCluster
             * slopeFactor
             * heightFactor
-            * riverFactor
+            * channelClearance
+            * riparianBoost
+            * lowlandBoost
             * clearingFactor;
         boolean treesAllowed = terrestrial
             && !profile.treeShapes().isEmpty()
@@ -52,7 +66,7 @@ public final class VegetationResolver {
             terrestrial ? clamp01(profile.shrubDensity() * wetBoost * slopeFactor) : 0.0,
             terrestrial ? clamp01(profile.groundDensity() * wetBoost) : 0.0,
             terrestrial ? clamp01(profile.flowerDensity() * wetBoost) : 0.0,
-            terrestrial ? profile.deadwoodDensity() * riverFactor : 0.0,
+            terrestrial ? profile.deadwoodDensity() * channelClearance : 0.0,
             terrestrial ? clamp01(profile.rockDensity() * (0.45 + surface.slope())) : 0.0,
             treesAllowed ? profile.oldGrowthDensity() * heightFactor : 0.0,
             treesAllowed,

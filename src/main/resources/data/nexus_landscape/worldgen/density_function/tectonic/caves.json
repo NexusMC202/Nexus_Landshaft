@@ -6,12 +6,12 @@
       "coordinate": "nexus_landscape:tectonic/depth",
       "points": [
         {
-          "location": 0.1,
+          "location": 0.26,
           "derivative": 0,
           "value": 10
         },
         {
-          "location": 0.2,
+          "location": 0.56,
           "derivative": 0,
           "value": 1
         }
