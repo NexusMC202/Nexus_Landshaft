@@ -13,6 +13,8 @@ public final class ConiferSpeciesAndEnvelopeSelfTest {
         verifyGeneratedSkeletonsDiffer();
         verifySpeciesFoliageDiffers();
         verifyEnvelopeContract();
+        verifyRegionalQuotas();
+        verifyBoundedModelCache();
         System.out.println("ConiferSpeciesAndEnvelopeSelfTest: PASS");
     }
 
@@ -127,6 +129,85 @@ public final class ConiferSpeciesAndEnvelopeSelfTest {
             "HERO must use more conservative probes");
         require(spruce.probeCount() < spruce.estimatedVolume(),
             "cheap envelope probes must be below full volume");
+    }
+
+    private static void verifyRegionalQuotas() {
+        long worldSeed = 0x51554F5441534545L;
+        int basic = 0;
+        int mid = 0;
+        int hero = 0;
+        for (int cellZ = 0; cellZ < TreeRegionalQuotaPolicy.REGION_CELLS; cellZ++) {
+            for (int cellX = 0; cellX < TreeRegionalQuotaPolicy.REGION_CELLS; cellX++) {
+                int x = cellX * TreeRegionalQuotaPolicy.CELL_SIZE + 8;
+                int z = cellZ * TreeRegionalQuotaPolicy.CELL_SIZE + 8;
+                if (TreeRegionalQuotaPolicy.allows(
+                    worldSeed, x, z, TreeQualityTier.BASIC
+                )) {
+                    basic++;
+                }
+                if (TreeRegionalQuotaPolicy.allows(
+                    worldSeed, x, z, TreeQualityTier.MID
+                )) {
+                    mid++;
+                }
+                if (TreeRegionalQuotaPolicy.allows(
+                    worldSeed, x, z, TreeQualityTier.HERO
+                )) {
+                    hero++;
+                }
+            }
+        }
+        require(basic == 64, "BASIC quota must admit every candidate cell");
+        require(mid == 8, "MID regional quota must admit exactly 8 cells");
+        require(hero == 1, "HERO regional quota must admit exactly 1 cell");
+
+        boolean forward = TreeRegionalQuotaPolicy.allows(
+            worldSeed, 40, 72, TreeQualityTier.HERO
+        );
+        boolean repeated = TreeRegionalQuotaPolicy.allows(
+            worldSeed, 40, 72, TreeQualityTier.HERO
+        );
+        require(forward == repeated, "regional quota is not deterministic");
+    }
+
+    private static void verifyBoundedModelCache() {
+        TreeModelCache.clear();
+        ProceduralTreePlan firstPlan = planAt(120, -88);
+        VoxelTreeModel first = TreeModelCache.getOrCreate(firstPlan);
+        VoxelTreeModel repeated = TreeModelCache.getOrCreate(firstPlan);
+        require(first == repeated, "cache must reuse the admitted tree model");
+        require(TreeModelCache.size() == 1, "cache must contain one admitted model");
+        require(TreeModelCache.capacity() == TreeModelCache.DEFAULT_CAPACITY,
+            "tree cache capacity mismatch");
+
+        ProceduralTreePlan secondPlan = planAt(136, -88);
+        VoxelTreeModel second = TreeModelCache.getOrCreate(secondPlan);
+        require(second.fingerprint() != first.fingerprint(),
+            "different tree plans must not alias in cache");
+        require(TreeModelCache.size() == 2,
+            "second plan must add one cache entry");
+        TreeModelCache.clear();
+        require(TreeModelCache.size() == 0, "tree cache clear failed");
+    }
+
+    private static ProceduralTreePlan planAt(int x, int z) {
+        return ProceduralTreePlan.create(
+            0x4341434845534545L,
+            x,
+            z,
+            VegetationProfile.TreeShape.SPRUCE_CONICAL,
+            false,
+            0.16,
+            0.14,
+            0.66,
+            0.44,
+            0.08,
+            -0.28,
+            0.12,
+            0.62,
+            -0.08,
+            96
+        );
     }
 
     private static SpeciesModels speciesModels() {
