@@ -92,7 +92,15 @@ tasks.register('stage6CommandTest', JavaExec) {
     mainClass = 'dev.nexusmc.landscape.command.Stage6CommandPolicySelfTest'
 }
 
+tasks.register('boundedCacheTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks strict cache capacity and concurrent clear/write behavior.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.util.BoundedConcurrentCacheSelfTest'
+}
+
 tasks.named('check') {
     dependsOn regionalFieldTest, stage6SurfaceTest, stage6VegetationTest,
-        stage6CommandTest
+        stage6CommandTest, boundedCacheTest
 }
