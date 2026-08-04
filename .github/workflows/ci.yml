@@ -2,7 +2,7 @@ name: build-and-worldgen-tests
 
 on:
   push:
-    branches: ["main", "agent/**"]
+    branches: ["main", "agent/**", "assistant/**"]
   pull_request:
 
 permissions:
@@ -42,3 +42,15 @@ jobs:
 
       - name: Clean build and deterministic worldgen tests
         run: ./gradlew clean build --stacktrace
+
+      - name: Upload verified mod jar
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-landscape-${{ github.sha }}
+          path: |
+            build/libs/*.jar
+            !build/libs/*-sources.jar
+            !build/libs/*-javadoc.jar
+          if-no-files-found: error
+          retention-days: 14
