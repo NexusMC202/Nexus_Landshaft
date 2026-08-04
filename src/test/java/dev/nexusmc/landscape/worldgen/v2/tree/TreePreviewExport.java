@@ -10,10 +10,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Exports deterministic tree models for visual tooling without loading
- * Minecraft. Files are CI artifacts, not runtime resources.
+ * Exports deterministic tree models and their anatomical decisions for visual
+ * tooling without loading Minecraft. Files are CI artifacts, not runtime
+ * resources.
  */
 public final class TreePreviewExport {
+    private static final int FORMAT_VERSION = 2;
+    private static final String GENERATOR_ID =
+        "nexus_landscape:conifer_anatomical_v2";
     private static final Gson GSON = new GsonBuilder()
         .setPrettyPrinting()
         .create();
@@ -55,23 +59,39 @@ public final class TreePreviewExport {
                 TreeLifeHistory history = TreeLifeHistory.generate(
                     seed, quality, environment
                 );
+                TrunkPlan trunk = TrunkPlan.resolve(
+                    seed, quality, environment, history
+                );
+                RootPlan roots = RootPlan.resolve(
+                    seed, quality, environment, history, trunk
+                );
+                BranchFamilyPlan branchFamilies = BranchFamilyPlan.resolve(
+                    seed, quality, environment, history, trunk
+                );
                 BranchGraph graph = ConiferBranchGenerator.generate(
                     seed, quality, environment, history
                 );
                 VoxelTreeModel model = TreeVoxelizer.voxelize(
                     seed, quality, graph
                 );
+
                 Preview preview = new Preview(
-                    "nexus_landscape:conifer_v1",
+                    FORMAT_VERSION,
+                    GENERATOR_ID,
                     entry.getKey(),
                     seed,
                     quality,
                     environment,
                     history,
+                    trunk,
+                    roots,
+                    branchFamilies,
                     graph.fingerprint(),
                     model.fingerprint(),
                     graph.segments().size(),
+                    deadBranches(graph),
                     model.wood().size(),
+                    undergroundWood(model),
                     model.leaves().size(),
                     bounds(model),
                     graph.segments(),
@@ -88,15 +108,31 @@ public final class TreePreviewExport {
         Files.writeString(
             output.resolve("manifest.json"),
             GSON.toJson(Map.of(
-                "format", 1,
-                "generator", "nexus_landscape:conifer_v1",
-                "files", exported
+                "format", FORMAT_VERSION,
+                "generator", GENERATOR_ID,
+                "files", exported,
+                "matrix", Map.of(
+                    "qualityTiers", TreeQualityTier.values().length,
+                    "environments", environments.size()
+                )
             ))
         );
         System.out.println(
             "TreePreviewExport: PASS files=" + exported
                 + " output=" + output.toAbsolutePath()
         );
+    }
+
+    private static int deadBranches(BranchGraph graph) {
+        return (int)graph.segments().stream()
+            .filter(BranchGraph.Segment::dead)
+            .count();
+    }
+
+    private static int undergroundWood(VoxelTreeModel model) {
+        return (int)model.wood().stream()
+            .filter(voxel -> voxel.y() < 0)
+            .count();
     }
 
     private static Bounds bounds(VoxelTreeModel model) {
@@ -125,16 +161,22 @@ public final class TreePreviewExport {
     }
 
     private record Preview(
+        int format,
         String generator,
         String environmentName,
         long seed,
         TreeQualityTier quality,
         TreeEnvironment environment,
         TreeLifeHistory lifeHistory,
+        TrunkPlan trunkPlan,
+        RootPlan rootPlan,
+        BranchFamilyPlan branchFamilyPlan,
         long branchFingerprint,
         long voxelFingerprint,
         int branchSegments,
+        int deadBranchSegments,
         int woodBlocks,
+        int undergroundWoodBlocks,
         int leafBlocks,
         Bounds bounds,
         List<BranchGraph.Segment> branches,
