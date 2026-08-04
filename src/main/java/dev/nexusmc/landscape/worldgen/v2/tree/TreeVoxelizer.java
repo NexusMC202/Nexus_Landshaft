@@ -10,6 +10,17 @@ public final class TreeVoxelizer {
     private TreeVoxelizer() {
     }
 
+    /**
+     * Compatibility overload for call sites that naturally start from seed.
+     */
+    public static VoxelTreeModel voxelize(
+        long seed,
+        TreeQualityTier quality,
+        BranchGraph graph
+    ) {
+        return voxelize(graph, quality, seed);
+    }
+
     public static VoxelTreeModel voxelize(
         BranchGraph graph,
         TreeQualityTier quality,
