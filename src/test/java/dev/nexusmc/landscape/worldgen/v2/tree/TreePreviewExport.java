@@ -15,9 +15,9 @@ import java.util.Map;
  * resources.
  */
 public final class TreePreviewExport {
-    private static final int FORMAT_VERSION = 2;
+    private static final int FORMAT_VERSION = 3;
     private static final String GENERATOR_ID =
-        "nexus_landscape:conifer_anatomical_v2";
+        "nexus_landscape:conifer_species_anatomical_v3";
     private static final Gson GSON = new GsonBuilder()
         .setPrettyPrinting()
         .create();
@@ -47,62 +47,71 @@ public final class TreePreviewExport {
 
         long rootSeed = 0x4E45585553545245L;
         int exported = 0;
-        for (TreeQualityTier quality : TreeQualityTier.values()) {
-            int environmentIndex = 0;
-            for (Map.Entry<String, TreeEnvironment> entry : environments.entrySet()) {
-                long seed = TreeLifeHistory.mix(
-                    rootSeed
-                        ^ ((long)quality.ordinal() << 48)
-                        ^ environmentIndex * 0x9E3779B97F4A7C15L
-                );
-                TreeEnvironment environment = entry.getValue();
-                TreeLifeHistory history = TreeLifeHistory.generate(
-                    seed, quality, environment
-                );
-                TrunkPlan trunk = TrunkPlan.resolve(
-                    seed, quality, environment, history
-                );
-                RootPlan roots = RootPlan.resolve(
-                    seed, quality, environment, history, trunk
-                );
-                BranchFamilyPlan branchFamilies = BranchFamilyPlan.resolve(
-                    seed, quality, environment, history, trunk
-                );
-                BranchGraph graph = ConiferBranchGenerator.generate(
-                    seed, quality, environment, history
-                );
-                VoxelTreeModel model = TreeVoxelizer.voxelize(
-                    seed, quality, graph
-                );
+        for (ConiferSpeciesProfile species : ConiferSpeciesProfile.values()) {
+            for (TreeQualityTier quality : TreeQualityTier.values()) {
+                int environmentIndex = 0;
+                for (Map.Entry<String, TreeEnvironment> entry : environments.entrySet()) {
+                    long seed = TreeLifeHistory.mix(
+                        rootSeed
+                            ^ ((long)species.ordinal() << 56)
+                            ^ ((long)quality.ordinal() << 48)
+                            ^ environmentIndex * 0x9E3779B97F4A7C15L
+                    );
+                    TreeEnvironment environment = entry.getValue();
+                    TreeLifeHistory history = TreeLifeHistory.generate(
+                        seed, quality, environment
+                    );
+                    TrunkPlan trunk = TrunkPlan.resolve(
+                        seed, quality, environment, history
+                    );
+                    RootPlan roots = RootPlan.resolve(
+                        seed, quality, environment, history, trunk
+                    );
+                    BranchFamilyPlan branchFamilies = BranchFamilyPlan.resolve(
+                        seed, quality, environment, history, trunk
+                    );
+                    BranchGraph graph = SpeciesConiferBranchGenerator.generate(
+                        seed, species, quality, environment, history
+                    );
+                    VoxelTreeModel model = TreeVoxelizer.voxelize(
+                        graph, quality, seed, species
+                    );
+                    TreePlacementEnvelope envelope = TreePlacementEnvelope.estimate(
+                        species, quality, environment, quality == TreeQualityTier.HERO
+                    );
 
-                Preview preview = new Preview(
-                    FORMAT_VERSION,
-                    GENERATOR_ID,
-                    entry.getKey(),
-                    seed,
-                    quality,
-                    environment,
-                    history,
-                    trunk,
-                    roots,
-                    branchFamilies,
-                    graph.fingerprint(),
-                    model.fingerprint(),
-                    graph.segments().size(),
-                    deadBranches(graph),
-                    model.wood().size(),
-                    undergroundWood(model),
-                    model.leaves().size(),
-                    bounds(model),
-                    graph.segments(),
-                    model.wood(),
-                    model.leaves()
-                );
-                String name = quality.name().toLowerCase()
-                    + "_" + entry.getKey() + ".json";
-                Files.writeString(output.resolve(name), GSON.toJson(preview));
-                environmentIndex++;
-                exported++;
+                    Preview preview = new Preview(
+                        FORMAT_VERSION,
+                        GENERATOR_ID,
+                        species,
+                        entry.getKey(),
+                        seed,
+                        quality,
+                        environment,
+                        history,
+                        trunk,
+                        roots,
+                        branchFamilies,
+                        envelope,
+                        graph.fingerprint(),
+                        model.fingerprint(),
+                        graph.segments().size(),
+                        deadBranches(graph),
+                        model.wood().size(),
+                        undergroundWood(model),
+                        model.leaves().size(),
+                        bounds(model),
+                        graph.segments(),
+                        model.wood(),
+                        model.leaves()
+                    );
+                    String name = species.name().toLowerCase()
+                        + "_" + quality.name().toLowerCase()
+                        + "_" + entry.getKey() + ".json";
+                    Files.writeString(output.resolve(name), GSON.toJson(preview));
+                    environmentIndex++;
+                    exported++;
+                }
             }
         }
         Files.writeString(
@@ -112,6 +121,7 @@ public final class TreePreviewExport {
                 "generator", GENERATOR_ID,
                 "files", exported,
                 "matrix", Map.of(
+                    "species", ConiferSpeciesProfile.values().length,
                     "qualityTiers", TreeQualityTier.values().length,
                     "environments", environments.size()
                 )
@@ -163,14 +173,16 @@ public final class TreePreviewExport {
     private record Preview(
         int format,
         String generator,
+        ConiferSpeciesProfile species,
         String environmentName,
         long seed,
         TreeQualityTier quality,
         TreeEnvironment environment,
         TreeLifeHistory lifeHistory,
-        TrunkPlan trunkPlan,
+        TrunkPlan baseTrunkPlan,
         RootPlan rootPlan,
-        BranchFamilyPlan branchFamilyPlan,
+        BranchFamilyPlan baseBranchFamilyPlan,
+        TreePlacementEnvelope placementEnvelope,
         long branchFingerprint,
         long voxelFingerprint,
         int branchSegments,
