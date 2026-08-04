@@ -100,7 +100,15 @@ tasks.register('boundedCacheTest', JavaExec) {
     mainClass = 'dev.nexusmc.landscape.worldgen.v2.util.BoundedConcurrentCacheSelfTest'
 }
 
+tasks.register('stage6ProfilerTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks Stage 6 histogram percentiles and reset behavior.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.diagnostics.Stage6ProfilerSelfTest'
+}
+
 tasks.named('check') {
     dependsOn regionalFieldTest, stage6SurfaceTest, stage6VegetationTest,
-        stage6CommandTest, boundedCacheTest
+        stage6CommandTest, boundedCacheTest, stage6ProfilerTest
 }
