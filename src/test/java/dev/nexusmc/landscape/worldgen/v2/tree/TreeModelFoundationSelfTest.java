@@ -1,6 +1,9 @@
 package dev.nexusmc.landscape.worldgen.v2.tree;
 
+import java.util.ArrayDeque;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public final class TreeModelFoundationSelfTest {
     private TreeModelFoundationSelfTest() {
@@ -13,6 +16,7 @@ public final class TreeModelFoundationSelfTest {
         verifyVoxelModel();
         verifyLifeHistory();
         verifyConiferGenerator();
+        verifyTreeVoxelizer();
         System.out.println("TreeModelFoundationSelfTest: PASS");
     }
 
@@ -140,6 +144,69 @@ public final class TreeModelFoundationSelfTest {
             require(first.segments().getFirst().parentId() == -1,
                 quality + " conifer root is invalid");
         }
+    }
+
+    private static void verifyTreeVoxelizer() {
+        TreeEnvironment environment = environment();
+        for (TreeQualityTier quality : TreeQualityTier.values()) {
+            long seed = 0x7AEE5EEDL + quality.ordinal();
+            TreeLifeHistory history = TreeLifeHistory.generate(seed, quality, environment);
+            BranchGraph graph = ConiferBranchGenerator.generate(
+                seed, quality, environment, history
+            );
+            VoxelTreeModel first = TreeVoxelizer.voxelize(graph, quality, seed);
+            VoxelTreeModel second = TreeVoxelizer.voxelize(graph, quality, seed);
+            require(first.fingerprint() == second.fingerprint(),
+                quality + " voxelization is not deterministic");
+            require(!first.leaves().isEmpty(), quality + " tree has no foliage");
+            require(first.wood().size() <= quality.budget().maxWoodBlocks(),
+                quality + " wood budget exceeded");
+            require(first.leaves().size() <= quality.budget().maxLeafBlocks(),
+                quality + " leaf budget exceeded");
+            require(connected(first.wood()), quality + " wood is disconnected");
+            require(disjoint(first.wood(), first.leaves()),
+                quality + " foliage overlaps wood");
+        }
+    }
+
+    private static boolean connected(List<VoxelTreeModel.Voxel> voxels) {
+        Set<VoxelTreeModel.Voxel> remaining = new HashSet<>(voxels);
+        ArrayDeque<VoxelTreeModel.Voxel> queue = new ArrayDeque<>();
+        VoxelTreeModel.Voxel first = remaining.iterator().next();
+        remaining.remove(first);
+        queue.add(first);
+        while (!queue.isEmpty()) {
+            VoxelTreeModel.Voxel current = queue.removeFirst();
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dy = -1; dy <= 1; dy++) {
+                    for (int dz = -1; dz <= 1; dz++) {
+                        if (dx == 0 && dy == 0 && dz == 0) {
+                            continue;
+                        }
+                        VoxelTreeModel.Voxel neighbor = new VoxelTreeModel.Voxel(
+                            current.x() + dx, current.y() + dy, current.z() + dz
+                        );
+                        if (remaining.remove(neighbor)) {
+                            queue.addLast(neighbor);
+                        }
+                    }
+                }
+            }
+        }
+        return remaining.isEmpty();
+    }
+
+    private static boolean disjoint(
+        List<VoxelTreeModel.Voxel> wood,
+        List<VoxelTreeModel.Voxel> leaves
+    ) {
+        Set<VoxelTreeModel.Voxel> occupied = new HashSet<>(wood);
+        for (VoxelTreeModel.Voxel leaf : leaves) {
+            if (!occupied.add(leaf)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static TreeEnvironment environment() {
