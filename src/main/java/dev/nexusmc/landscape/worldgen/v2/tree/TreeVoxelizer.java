@@ -10,9 +10,7 @@ public final class TreeVoxelizer {
     private TreeVoxelizer() {
     }
 
-    /**
-     * Compatibility overload for call sites that naturally start from seed.
-     */
+    /** Compatibility overload for call sites that naturally start from seed. */
     public static VoxelTreeModel voxelize(
         long seed,
         TreeQualityTier quality,
@@ -121,7 +119,7 @@ public final class TreeVoxelizer {
                         continue;
                     }
                     VoxelTreeModel.Voxel voxel = bounded(
-                        centerX + dx, centerY + dy, centerZ + dz, budget
+                        centerX + dx, centerY + dy, centerZ + dz, budget, false
                     );
                     if (voxel != null && !wood.contains(voxel)) {
                         leaves.add(voxel);
@@ -138,7 +136,7 @@ public final class TreeVoxelizer {
         int z,
         TreeQualityTier.TreeBudget budget
     ) {
-        VoxelTreeModel.Voxel voxel = bounded(x, y, z, budget);
+        VoxelTreeModel.Voxel voxel = bounded(x, y, z, budget, true);
         if (voxel != null) {
             output.add(voxel);
         }
@@ -148,11 +146,13 @@ public final class TreeVoxelizer {
         int x,
         int y,
         int z,
-        TreeQualityTier.TreeBudget budget
+        TreeQualityTier.TreeBudget budget,
+        boolean wood
     ) {
+        int minimumY = wood ? VoxelTreeModel.MIN_ROOT_Y : 0;
         if (Math.abs(x) > budget.maxHorizontalRadius()
             || Math.abs(z) > budget.maxHorizontalRadius()
-            || y < 0 || y > budget.maxHeight()) {
+            || y < minimumY || y > budget.maxHeight()) {
             return null;
         }
         return new VoxelTreeModel.Voxel(x, y, z);
