@@ -11,6 +11,7 @@ public final class ConiferSpeciesAndEnvelopeSelfTest {
         verifySpeciesMapping();
         verifySpeciesSilhouetteContract();
         verifyGeneratedSkeletonsDiffer();
+        verifySpeciesFoliageDiffers();
         verifyEnvelopeContract();
         System.out.println("ConiferSpeciesAndEnvelopeSelfTest: PASS");
     }
@@ -49,38 +50,43 @@ public final class ConiferSpeciesAndEnvelopeSelfTest {
     }
 
     private static void verifyGeneratedSkeletonsDiffer() {
-        long seed = 0x535045434945534CL;
-        TreeEnvironment environment = new TreeEnvironment(
-            0.14, 0.66, 0.46, 0.07,
-            -0.28, 0.12, 0.62, -0.08, 96
-        );
-        TreeLifeHistory history = TreeLifeHistory.generate(
-            seed, TreeQualityTier.MID, environment
-        );
-        BranchGraph spruce = SpeciesConiferBranchGenerator.generate(
-            seed,
-            ConiferSpeciesProfile.SPRUCE,
-            TreeQualityTier.MID,
-            environment,
-            history
-        );
-        BranchGraph pine = SpeciesConiferBranchGenerator.generate(
-            seed,
-            ConiferSpeciesProfile.PINE,
-            TreeQualityTier.MID,
-            environment,
-            history
-        );
-        int trunkSections = TrunkPlan.resolve(
-            seed, TreeQualityTier.MID, environment, history
-        ).sections();
+        SpeciesModels models = speciesModels();
+        int trunkSections = models.trunkSections();
 
-        require(spruce.fingerprint() != pine.fingerprint(),
+        require(models.spruceGraph().fingerprint()
+                != models.pineGraph().fingerprint(),
             "spruce and pine graphs must not be identical");
-        require(maxY(pine) > maxY(spruce),
+        require(maxY(models.pineGraph()) > maxY(models.spruceGraph()),
             "generated pine must be taller than generated spruce");
-        require(firstCrownY(pine, trunkSections) > firstCrownY(spruce, trunkSections),
+        require(firstCrownY(models.pineGraph(), trunkSections)
+                > firstCrownY(models.spruceGraph(), trunkSections),
             "generated pine crown must begin higher");
+    }
+
+    private static void verifySpeciesFoliageDiffers() {
+        SpeciesModels models = speciesModels();
+        VoxelTreeModel spruce = TreeVoxelizer.voxelize(
+            models.spruceGraph(),
+            TreeQualityTier.MID,
+            models.seed(),
+            ConiferSpeciesProfile.SPRUCE
+        );
+        VoxelTreeModel pine = TreeVoxelizer.voxelize(
+            models.pineGraph(),
+            TreeQualityTier.MID,
+            models.seed(),
+            ConiferSpeciesProfile.PINE
+        );
+
+        require(!spruce.leaves().isEmpty(), "spruce foliage is empty");
+        require(!pine.leaves().isEmpty(), "pine foliage is empty");
+        require(spruce.fingerprint() != pine.fingerprint(),
+            "species voxel models must not be identical");
+
+        double spruceShare = lowerFoliageShare(spruce);
+        double pineShare = lowerFoliageShare(pine);
+        require(spruceShare > pineShare,
+            "spruce must retain more lower foliage than pine");
     }
 
     private static void verifyEnvelopeContract() {
@@ -123,6 +129,50 @@ public final class ConiferSpeciesAndEnvelopeSelfTest {
             "cheap envelope probes must be below full volume");
     }
 
+    private static SpeciesModels speciesModels() {
+        long seed = 0x535045434945534CL;
+        TreeEnvironment environment = new TreeEnvironment(
+            0.14, 0.66, 0.46, 0.07,
+            -0.28, 0.12, 0.62, -0.08, 96
+        );
+        TreeLifeHistory history = TreeLifeHistory.generate(
+            seed, TreeQualityTier.MID, environment
+        );
+        BranchGraph spruce = SpeciesConiferBranchGenerator.generate(
+            seed,
+            ConiferSpeciesProfile.SPRUCE,
+            TreeQualityTier.MID,
+            environment,
+            history
+        );
+        BranchGraph pine = SpeciesConiferBranchGenerator.generate(
+            seed,
+            ConiferSpeciesProfile.PINE,
+            TreeQualityTier.MID,
+            environment,
+            history
+        );
+        int trunkSections = TrunkPlan.resolve(
+            seed, TreeQualityTier.MID, environment, history
+        ).sections();
+        return new SpeciesModels(seed, spruce, pine, trunkSections);
+    }
+
+    private static double lowerFoliageShare(VoxelTreeModel model) {
+        int maxY = Integer.MIN_VALUE;
+        for (VoxelTreeModel.Voxel leaf : model.leaves()) {
+            maxY = Math.max(maxY, leaf.y());
+        }
+        double cutoff = maxY * 0.56;
+        int lower = 0;
+        for (VoxelTreeModel.Voxel leaf : model.leaves()) {
+            if (leaf.y() < cutoff) {
+                lower++;
+            }
+        }
+        return lower / (double)model.leaves().size();
+    }
+
     private static double maxY(BranchGraph graph) {
         double result = Double.NEGATIVE_INFINITY;
         for (BranchGraph.Segment segment : graph.segments()) {
@@ -157,5 +207,13 @@ public final class ConiferSpeciesAndEnvelopeSelfTest {
         if (!condition) {
             throw new AssertionError(message);
         }
+    }
+
+    private record SpeciesModels(
+        long seed,
+        BranchGraph spruceGraph,
+        BranchGraph pineGraph,
+        int trunkSections
+    ) {
     }
 }
