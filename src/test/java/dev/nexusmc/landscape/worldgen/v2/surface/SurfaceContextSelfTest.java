@@ -10,6 +10,7 @@ public final class SurfaceContextSelfTest {
     public static void main(String[] args) {
         rejectsInvalidSlope();
         rejectsInvalidUnitFields();
+        rejectsInvalidDistances();
         checksDerivedFlags();
     }
 
@@ -33,6 +34,15 @@ public final class SurfaceContextSelfTest {
             64.0, 0.0, 0.0, 0.0, 0.0, 0.0,
             0.0, 0.0, 0.0, 0.0, 0.5, 0.5
         ));
+    }
+
+    private static void rejectsInvalidDistances() {
+        expectFailure(() -> context(0.1, 0.0, -0.01, 0.0, 0.0, 80.0, 0.0));
+        expectFailure(() -> context(0.1, 0.0, Double.NaN, 0.0, 0.0, 80.0, 0.0));
+        expectFailure(() -> contextWithOceanDistance(-0.01));
+        expectFailure(() -> contextWithOceanDistance(Double.POSITIVE_INFINITY));
+        context(0.1, 0.0, 0.0, 0.0, 0.0, 80.0, 0.0);
+        contextWithOceanDistance(0.0);
     }
 
     private static void checksDerivedFlags() {
@@ -65,6 +75,43 @@ public final class SurfaceContextSelfTest {
         double elevation,
         double glacierWeight
     ) {
+        return createContext(
+            slope,
+            riverMask,
+            riverDistance,
+            64.0,
+            groundwater,
+            alpineInfluence,
+            elevation,
+            glacierWeight
+        );
+    }
+
+    private static SurfaceContext contextWithOceanDistance(
+        double oceanDistance
+    ) {
+        return createContext(
+            0.1,
+            0.0,
+            64.0,
+            oceanDistance,
+            0.0,
+            0.0,
+            80.0,
+            0.0
+        );
+    }
+
+    private static SurfaceContext createContext(
+        double slope,
+        double riverMask,
+        double riverDistance,
+        double oceanDistance,
+        double groundwater,
+        double alpineInfluence,
+        double elevation,
+        double glacierWeight
+    ) {
         return new SurfaceContext(
             1L,
             10,
@@ -85,7 +132,7 @@ public final class SurfaceContextSelfTest {
             riverMask,
             0.0,
             0.0,
-            64.0,
+            oceanDistance,
             groundwater,
             0.0,
             glacierWeight,
