@@ -12,7 +12,8 @@ import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * Bridges pure tree models into Minecraft world placement. A cheap conservative
- * envelope is checked before allocating the complete graph and voxel model.
+ * envelope is checked before a complete model is requested from the strictly
+ * bounded deterministic cache.
  */
 public final class ProceduralTreeRuntime {
     public static final String ENABLE_PROPERTY = "nexus_landscape.tree_v2";
@@ -32,15 +33,27 @@ public final class ProceduralTreeRuntime {
         if (plan == null) {
             throw new IllegalArgumentException("tree plan is required");
         }
-        return placeConifer(
+        if (!enabled()) {
+            return false;
+        }
+        requireRuntimeInputs(
             level,
             base,
-            plan.seed(),
             plan.species(),
             plan.quality(),
             plan.environment(),
             plan.envelope()
         );
+        if (!canFitEnvelope(level, base, plan.envelope())) {
+            return false;
+        }
+
+        VoxelTreeModel model = TreeModelCache.getOrCreate(plan);
+        if (!canPlace(level, base, model)) {
+            return false;
+        }
+        placeModel(level, base, model);
+        return true;
     }
 
     /** Compatibility overload for older tests and callers; resolves as spruce. */
@@ -57,7 +70,7 @@ public final class ProceduralTreeRuntime {
             environment,
             false
         );
-        return placeConifer(
+        return placeConiferUncached(
             level,
             base,
             seed,
@@ -68,7 +81,7 @@ public final class ProceduralTreeRuntime {
         );
     }
 
-    private static boolean placeConifer(
+    private static boolean placeConiferUncached(
         WorldGenLevel level,
         BlockPos base,
         long seed,
@@ -80,10 +93,7 @@ public final class ProceduralTreeRuntime {
         if (!enabled()) {
             return false;
         }
-        if (level == null || base == null || species == null || quality == null
-            || environment == null || envelope == null) {
-            throw new IllegalArgumentException("runtime tree inputs are required");
-        }
+        requireRuntimeInputs(level, base, species, quality, environment, envelope);
         if (!canFitEnvelope(level, base, envelope)) {
             return false;
         }
@@ -100,6 +110,20 @@ public final class ProceduralTreeRuntime {
         }
         placeModel(level, base, model);
         return true;
+    }
+
+    private static void requireRuntimeInputs(
+        WorldGenLevel level,
+        BlockPos base,
+        ConiferSpeciesProfile species,
+        TreeQualityTier quality,
+        TreeEnvironment environment,
+        TreePlacementEnvelope envelope
+    ) {
+        if (level == null || base == null || species == null || quality == null
+            || environment == null || envelope == null) {
+            throw new IllegalArgumentException("runtime tree inputs are required");
+        }
     }
 
     private static boolean canFitEnvelope(
