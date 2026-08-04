@@ -29,11 +29,45 @@ public final class ProceduralTreeIntegration {
         double openSpaceX,
         double openSpaceZ
     ) {
+        return tryPlaceDetailed(
+            level,
+            base,
+            worldSeed,
+            shape,
+            oldGrowth,
+            oldGrowthDensity,
+            slope,
+            soilMoisture,
+            forestCompetition,
+            riverInfluence,
+            windX,
+            windZ,
+            openSpaceX,
+            openSpaceZ
+        ).result();
+    }
+
+    public static Outcome tryPlaceDetailed(
+        WorldGenLevel level,
+        BlockPos base,
+        long worldSeed,
+        VegetationProfile.TreeShape shape,
+        boolean oldGrowth,
+        double oldGrowthDensity,
+        double slope,
+        double soilMoisture,
+        double forestCompetition,
+        double riverInfluence,
+        double windX,
+        double windZ,
+        double openSpaceX,
+        double openSpaceZ
+    ) {
         if (!ProceduralTreePolicy.supports(shape)) {
-            return Result.UNSUPPORTED;
+            return new Outcome(Result.UNSUPPORTED, null, 0L);
         }
         if (!ProceduralTreeRuntime.enabled()) {
-            return Result.DISABLED;
+            return new Outcome(Result.DISABLED, null, 0L);
         }
         if (level == null || base == null) {
             throw new IllegalArgumentException("level and base are required");
@@ -55,9 +89,32 @@ public final class ProceduralTreeIntegration {
             openSpaceZ,
             base.getY() - 1
         );
-        return ProceduralTreeRuntime.placeConifer(level, base, plan)
+        Result result = ProceduralTreeRuntime.placeConifer(level, base, plan)
             ? Result.PLACED
             : Result.COLLISION;
+        return new Outcome(result, plan.quality(), plan.fingerprint());
+    }
+
+    public record Outcome(
+        Result result,
+        TreeQualityTier quality,
+        long planFingerprint
+    ) {
+        public Outcome {
+            if (result == null) {
+                throw new IllegalArgumentException("result is required");
+            }
+            if ((result == Result.PLACED || result == Result.COLLISION)
+                && quality == null) {
+                throw new IllegalArgumentException(
+                    "runtime outcomes require a quality tier"
+                );
+            }
+        }
+
+        public boolean shouldFallback() {
+            return result.shouldFallback();
+        }
     }
 
     public enum Result {
