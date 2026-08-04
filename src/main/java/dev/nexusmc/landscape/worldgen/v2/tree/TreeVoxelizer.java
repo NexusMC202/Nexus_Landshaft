@@ -10,22 +10,43 @@ public final class TreeVoxelizer {
     private TreeVoxelizer() {
     }
 
-    /** Compatibility overload for call sites that naturally start from seed. */
+    /** Compatibility overload: legacy callers resolve the shared conifer as spruce. */
     public static VoxelTreeModel voxelize(
         long seed,
         TreeQualityTier quality,
         BranchGraph graph
     ) {
-        return voxelize(graph, quality, seed);
+        return voxelize(graph, quality, seed, ConiferSpeciesProfile.SPRUCE);
     }
 
+    /** Compatibility overload: legacy callers resolve the shared conifer as spruce. */
     public static VoxelTreeModel voxelize(
         BranchGraph graph,
         TreeQualityTier quality,
         long seed
     ) {
-        if (graph == null || quality == null) {
-            throw new IllegalArgumentException("graph and quality are required");
+        return voxelize(graph, quality, seed, ConiferSpeciesProfile.SPRUCE);
+    }
+
+    public static VoxelTreeModel voxelize(
+        long seed,
+        TreeQualityTier quality,
+        BranchGraph graph,
+        ConiferSpeciesProfile species
+    ) {
+        return voxelize(graph, quality, seed, species);
+    }
+
+    public static VoxelTreeModel voxelize(
+        BranchGraph graph,
+        TreeQualityTier quality,
+        long seed,
+        ConiferSpeciesProfile species
+    ) {
+        if (graph == null || quality == null || species == null) {
+            throw new IllegalArgumentException(
+                "graph, quality and species are required"
+            );
         }
         TreeQualityTier.TreeBudget budget = quality.budget();
         LinkedHashSet<VoxelTreeModel.Voxel> wood = new LinkedHashSet<>();
@@ -34,9 +55,20 @@ public final class TreeVoxelizer {
         for (BranchGraph.Segment segment : graph.segments()) {
             rasterizeWood(segment, wood, budget);
         }
+
+        double crownTop = crownTop(graph);
         for (BranchGraph.Segment segment : graph.segments()) {
-            if (!segment.dead() && segment.endRadius() <= 0.72) {
-                growNeedleMass(segment, seed, leaves, wood, budget);
+            if (segment.dead() || segment.endRadius() > 0.72) {
+                continue;
+            }
+            if (species == ConiferSpeciesProfile.PINE) {
+                growPineNeedleCluster(
+                    segment, crownTop, seed, leaves, wood, budget, species
+                );
+            } else {
+                growSpruceNeedleMass(
+                    segment, crownTop, seed, leaves, wood, budget, species
+                );
             }
         }
 
@@ -89,44 +121,160 @@ public final class TreeVoxelizer {
         }
     }
 
-    private static void growNeedleMass(
+    private static void growSpruceNeedleMass(
         BranchGraph.Segment segment,
+        double crownTop,
         long seed,
         Set<VoxelTreeModel.Voxel> leaves,
         Set<VoxelTreeModel.Voxel> wood,
-        TreeQualityTier.TreeBudget budget
+        TreeQualityTier.TreeBudget budget,
+        ConiferSpeciesProfile species
     ) {
-        long hash = mix(seed ^ ((long)segment.id() * 0x9E3779B97F4A7C15L));
+        long hash = foliageHash(seed, segment.id(), species);
+        double relativeHeight = crownTop <= 0.0
+            ? 1.0
+            : clamp(segment.endY() / crownTop, 0.0, 1.0);
+        int centerX = (int)Math.round(segment.endX());
+        int centerY = (int)Math.round(segment.endY() - (1.0 - relativeHeight) * 0.45);
+        int centerZ = (int)Math.round(segment.endZ());
+
+        double density = species.foliageDensityMultiplier();
+        int horizontal = 1 + (unit(hash) < 0.68 * density ? 1 : 0);
+        int verticalDown = 1 + (relativeHeight < 0.72 ? 1 : 0);
+        int verticalUp = relativeHeight > 0.80 ? 2 : 1;
+
+        for (int dx = -horizontal; dx <= horizontal; dx++) {
+            for (int dy = -verticalDown; dy <= verticalUp; dy++) {
+                for (int dz = -horizontal; dz <= horizontal; dz++) {
+                    double horizontalShape =
+                        (dx * dx + dz * dz) / (double)(horizontal * horizontal);
+                    double verticalScale = dy < 0 ? verticalDown : verticalUp;
+                    double verticalShape = (dy * dy) / (verticalScale * verticalScale);
+                    double shape = horizontalShape + verticalShape;
+                    if (shape > 1.22) {
+                        continue;
+                    }
+                    long local = localHash(hash, dx, dy, dz);
+                    double edgeSkip = 0.22 / density;
+                    if (shape > 0.58 && unit(local) < edgeSkip) {
+                        continue;
+                    }
+                    addLeaf(
+                        centerX + dx,
+                        centerY + dy,
+                        centerZ + dz,
+                        leaves,
+                        wood,
+                        budget
+                    );
+                }
+            }
+        }
+    }
+
+    private static void growPineNeedleCluster(
+        BranchGraph.Segment segment,
+        double crownTop,
+        long seed,
+        Set<VoxelTreeModel.Voxel> leaves,
+        Set<VoxelTreeModel.Voxel> wood,
+        TreeQualityTier.TreeBudget budget,
+        ConiferSpeciesProfile species
+    ) {
+        double relativeHeight = crownTop <= 0.0
+            ? 1.0
+            : clamp(segment.endY() / crownTop, 0.0, 1.0);
+        if (relativeHeight < 0.54) {
+            return;
+        }
+
+        long hash = foliageHash(seed, segment.id(), species);
+        double acceptance = 0.52
+            + (relativeHeight - 0.54) * 0.82
+            * species.upperCrownMultiplier();
+        if (relativeHeight < 0.74 && unit(hash) > acceptance) {
+            return;
+        }
+
         int centerX = (int)Math.round(segment.endX());
         int centerY = (int)Math.round(segment.endY());
         int centerZ = (int)Math.round(segment.endZ());
-        int horizontal = 1 + (unit(hash) > 0.30 ? 1 : 0);
-        int vertical = 1 + (unit(mix(hash)) > 0.64 ? 1 : 0);
+        int horizontal = relativeHeight > 0.76 ? 2 : 1;
+        if (unit(mix(hash)) > 0.72) {
+            horizontal++;
+        }
+        horizontal = Math.min(horizontal, 3);
+        int vertical = relativeHeight > 0.84 ? 2 : 1;
+        double density = species.foliageDensityMultiplier();
 
         for (int dx = -horizontal; dx <= horizontal; dx++) {
             for (int dy = -vertical; dy <= vertical; dy++) {
                 for (int dz = -horizontal; dz <= horizontal; dz++) {
-                    double shape = (dx * dx + dz * dz) / (double)(horizontal * horizontal)
-                        + (dy * dy) / (double)(vertical * vertical);
-                    if (shape > 1.18) {
+                    double shape =
+                        (dx * dx + dz * dz) / (double)(horizontal * horizontal)
+                            + (dy * dy) / (double)(vertical * vertical);
+                    if (shape > 1.10) {
                         continue;
                     }
-                    long local = mix(hash
-                        ^ ((long)dx * 0x632BE59BD9B4E019L)
-                        ^ ((long)dy * 0x94D049BB133111EBL)
-                        ^ ((long)dz * 0xC2B2AE3D27D4EB4FL));
-                    if (shape > 0.62 && unit(local) < 0.24) {
+                    long local = localHash(hash, dx, dy, dz);
+                    double skip = shape > 0.48
+                        ? clamp(0.42 / density, 0.22, 0.62)
+                        : clamp(0.16 / density, 0.08, 0.30);
+                    if (unit(local) < skip) {
                         continue;
                     }
-                    VoxelTreeModel.Voxel voxel = bounded(
-                        centerX + dx, centerY + dy, centerZ + dz, budget, false
+                    addLeaf(
+                        centerX + dx,
+                        centerY + dy,
+                        centerZ + dz,
+                        leaves,
+                        wood,
+                        budget
                     );
-                    if (voxel != null && !wood.contains(voxel)) {
-                        leaves.add(voxel);
-                    }
                 }
             }
         }
+    }
+
+    private static void addLeaf(
+        int x,
+        int y,
+        int z,
+        Set<VoxelTreeModel.Voxel> leaves,
+        Set<VoxelTreeModel.Voxel> wood,
+        TreeQualityTier.TreeBudget budget
+    ) {
+        VoxelTreeModel.Voxel voxel = bounded(x, y, z, budget, false);
+        if (voxel != null && !wood.contains(voxel)) {
+            leaves.add(voxel);
+        }
+    }
+
+    private static double crownTop(BranchGraph graph) {
+        double top = 0.0;
+        for (BranchGraph.Segment segment : graph.segments()) {
+            if (!segment.dead()) {
+                top = Math.max(top, Math.max(segment.startY(), segment.endY()));
+            }
+        }
+        return top;
+    }
+
+    private static long foliageHash(
+        long seed,
+        int segmentId,
+        ConiferSpeciesProfile species
+    ) {
+        return mix(seed
+            ^ ((long)segmentId * 0x9E3779B97F4A7C15L)
+            ^ ((long)species.ordinal() * 0xD1B54A32D192ED03L));
+    }
+
+    private static long localHash(long hash, int dx, int dy, int dz) {
+        return mix(hash
+            ^ ((long)dx * 0x632BE59BD9B4E019L)
+            ^ ((long)dy * 0x94D049BB133111EBL)
+            ^ ((long)dz * 0xC2B2AE3D27D4EB4FL));
     }
 
     private static void addBounded(
@@ -174,6 +322,10 @@ public final class TreeVoxelizer {
 
     private static double lerp(double start, double end, double t) {
         return start + (end - start) * t;
+    }
+
+    private static double clamp(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     private static long mix(long value) {
