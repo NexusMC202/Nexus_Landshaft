@@ -1,5 +1,6 @@
 package dev.nexusmc.landscape.worldgen.v2.tree;
 
+import dev.nexusmc.landscape.worldgen.v2.vegetation.VegetationProfile;
 import java.util.ArrayDeque;
 import java.util.HashSet;
 import java.util.List;
@@ -17,6 +18,7 @@ public final class TreeModelFoundationSelfTest {
         verifyLifeHistory();
         verifyConiferGenerator();
         verifyVoxelizer();
+        verifyRuntimePolicy();
         TreePreviewExport.main(new String[0]);
         System.out.println("TreeModelFoundationSelfTest: PASS");
     }
@@ -175,6 +177,39 @@ public final class TreeModelFoundationSelfTest {
                     quality + " leaf overlaps wood: " + leaf);
             }
         }
+    }
+
+    private static void verifyRuntimePolicy() {
+        require(ProceduralTreePolicy.supports(
+            VegetationProfile.TreeShape.SPRUCE_CONICAL
+        ), "spruce must use Tree System v2");
+        require(ProceduralTreePolicy.supports(
+            VegetationProfile.TreeShape.PINE_TALL
+        ), "pine must use Tree System v2");
+        require(!ProceduralTreePolicy.supports(
+            VegetationProfile.TreeShape.OAK_ROUNDED
+        ), "oak rollout is premature");
+
+        TreeEnvironment basic = ProceduralTreePolicy.environment(
+            0.08, 0.45, 0.72, 0.06,
+            0.06, 0.02, 0.10, 0.04, 84
+        );
+        TreeEnvironment exposed = ProceduralTreePolicy.environment(
+            0.58, 0.40, 0.18, 0.02,
+            -0.82, 0.20, 0.70, -0.10, 132
+        );
+        TreeEnvironment hero = ProceduralTreePolicy.environment(
+            0.12, 0.82, 0.28, 0.12,
+            0.12, -0.08, 0.82, 0.14, 92
+        );
+
+        require(ProceduralTreePolicy.quality(false, 0.08, basic)
+            == TreeQualityTier.BASIC, "ordinary conifer must remain BASIC");
+        require(ProceduralTreePolicy.quality(false, 0.18, exposed)
+            == TreeQualityTier.MID, "exposed conifer must become MID");
+        require(ProceduralTreePolicy.quality(true, 0.62, hero)
+            == TreeQualityTier.HERO, "rare old-growth conifer must become HERO");
+        expectFailure(() -> ProceduralTreePolicy.quality(false, 1.2, basic));
     }
 
     private static boolean connected(List<VoxelTreeModel.Voxel> voxels) {
