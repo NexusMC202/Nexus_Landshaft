@@ -133,8 +133,17 @@ tasks.register('surfaceContextTest', JavaExec) {
     mainClass = 'dev.nexusmc.landscape.worldgen.v2.surface.SurfaceContextSelfTest'
 }
 
+tasks.register('surfaceProfileInvariantTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks surface profile traits, palettes and immutable data invariants.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.surface.SurfaceProfileInvariantSelfTest'
+}
+
 tasks.named('check') {
     dependsOn regionalFieldTest, stage6SurfaceTest, stage6VegetationTest,
         stage6CommandTest, boundedCacheTest, stage6ProfilerTest,
-        surfaceNoiseTest, surfaceSelectionTest, surfaceContextTest
+        surfaceNoiseTest, surfaceSelectionTest, surfaceContextTest,
+        surfaceProfileInvariantTest
 }
