@@ -48,12 +48,12 @@ public record SurfaceContext(
         requireFinite(elevation, "elevation");
         normalizedHeight = unit(normalizedHeight, "normalizedHeight");
         slope = unit(slope, "slope");
-        requireFinite(riverDistance, "riverDistance");
+        riverDistance = nonNegative(riverDistance, "riverDistance");
         riverMask = unit(riverMask, "riverMask");
         riverInfluence = unit(riverInfluence, "riverInfluence");
         lakeBasinMask = unit(lakeBasinMask, "lakeBasinMask");
         coastWeight = unit(coastWeight, "coastWeight");
-        requireFinite(oceanDistance, "oceanDistance");
+        oceanDistance = nonNegative(oceanDistance, "oceanDistance");
         groundwater = unit(groundwater, "groundwater");
         volcanicWeight = unit(volcanicWeight, "volcanicWeight");
         glacierWeight = unit(glacierWeight, "glacierWeight");
@@ -90,6 +90,16 @@ public record SurfaceContext(
         if (value < 0.0 || value > 1.0) {
             throw new IllegalArgumentException(
                 description + " outside [0, 1]: " + value
+            );
+        }
+        return value;
+    }
+
+    private static double nonNegative(double value, String description) {
+        requireFinite(value, description);
+        if (value < 0.0) {
+            throw new IllegalArgumentException(
+                description + " cannot be negative: " + value
             );
         }
         return value;
