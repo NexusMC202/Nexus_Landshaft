@@ -11,8 +11,8 @@ import net.minecraft.world.level.block.RotatedPillarBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
 /**
- * Bridges pure tree models into Minecraft world placement. The complete model
- * is generated and collision-checked before the first block is mutated.
+ * Bridges pure tree models into Minecraft world placement. A cheap conservative
+ * envelope is checked before allocating the complete graph and voxel model.
  */
 public final class ProceduralTreeRuntime {
     public static final String ENABLE_PROPERTY = "nexus_landscape.tree_v2";
@@ -36,11 +36,14 @@ public final class ProceduralTreeRuntime {
             level,
             base,
             plan.seed(),
+            plan.species(),
             plan.quality(),
-            plan.environment()
+            plan.environment(),
+            plan.envelope()
         );
     }
 
+    /** Compatibility overload for older tests and callers; resolves as spruce. */
     public static boolean placeConifer(
         WorldGenLevel level,
         BlockPos base,
@@ -48,15 +51,46 @@ public final class ProceduralTreeRuntime {
         TreeQualityTier quality,
         TreeEnvironment environment
     ) {
+        TreePlacementEnvelope envelope = TreePlacementEnvelope.estimate(
+            ConiferSpeciesProfile.SPRUCE,
+            quality,
+            environment,
+            false
+        );
+        return placeConifer(
+            level,
+            base,
+            seed,
+            ConiferSpeciesProfile.SPRUCE,
+            quality,
+            environment,
+            envelope
+        );
+    }
+
+    private static boolean placeConifer(
+        WorldGenLevel level,
+        BlockPos base,
+        long seed,
+        ConiferSpeciesProfile species,
+        TreeQualityTier quality,
+        TreeEnvironment environment,
+        TreePlacementEnvelope envelope
+    ) {
         if (!enabled()) {
             return false;
         }
-        if (level == null || base == null || quality == null || environment == null) {
+        if (level == null || base == null || species == null || quality == null
+            || environment == null || envelope == null) {
             throw new IllegalArgumentException("runtime tree inputs are required");
         }
+        if (!canFitEnvelope(level, base, envelope)) {
+            return false;
+        }
+
         TreeLifeHistory history = TreeLifeHistory.generate(seed, quality, environment);
-        BranchGraph graph = ConiferBranchGenerator.generate(
-            seed, quality, environment, history
+        BranchGraph graph = SpeciesConiferBranchGenerator.generate(
+            seed, species, quality, environment, history
         );
         VoxelTreeModel model = TreeVoxelizer.voxelize(graph, quality, seed);
         if (!canPlace(level, base, model)) {
@@ -64,6 +98,55 @@ public final class ProceduralTreeRuntime {
         }
         placeModel(level, base, model);
         return true;
+    }
+
+    private static boolean canFitEnvelope(
+        WorldGenLevel level,
+        BlockPos base,
+        TreePlacementEnvelope envelope
+    ) {
+        BlockPos ground = base.below();
+        if (level.getBlockState(ground).isAir()
+            || !level.getFluidState(base).isEmpty()) {
+            return false;
+        }
+
+        int verticalProbes = Math.max(3, envelope.probeCount() / 3);
+        for (int index = 0; index < verticalProbes; index++) {
+            int y = (int)Math.round(
+                envelope.height() * index / (double)(verticalProbes - 1)
+            );
+            if (!probeReplaceable(level, base.above(y))) {
+                return false;
+            }
+        }
+
+        int radialProbes = envelope.probeCount() - verticalProbes;
+        int crownY = Math.max(2, (int)Math.round(envelope.height() * 0.62));
+        for (int index = 0; index < radialProbes; index++) {
+            double angle = Math.PI * 2.0 * index / Math.max(1, radialProbes);
+            int radius = index % 2 == 0
+                ? envelope.horizontalRadius()
+                : Math.max(1, envelope.horizontalRadius() / 2);
+            BlockPos probe = base.offset(
+                (int)Math.round(Math.cos(angle) * radius),
+                crownY + (index % 3 - 1),
+                (int)Math.round(Math.sin(angle) * radius)
+            );
+            if (!probeReplaceable(level, probe)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean probeReplaceable(
+        WorldGenLevel level,
+        BlockPos position
+    ) {
+        return withinBuildHeight(level, position)
+            && level.getFluidState(position).isEmpty()
+            && level.getBlockState(position).canBeReplaced();
     }
 
     private static boolean canPlace(
