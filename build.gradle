@@ -169,10 +169,18 @@ tasks.register('treeModelFoundationTest', JavaExec) {
     mainClass = 'dev.nexusmc.landscape.worldgen.v2.tree.TreeModelFoundationSelfTest'
 }
 
+tasks.register('anatomicalPlanningTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks staged trunk, root and branch-family planning.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.tree.AnatomicalPlanningSelfTest'
+}
+
 tasks.named('check') {
     dependsOn regionalFieldTest, stage6SurfaceTest, stage6VegetationTest,
         stage6CommandTest, boundedCacheTest, stage6ProfilerTest,
         surfaceNoiseTest, surfaceSelectionTest, surfaceContextTest,
         surfaceProfileInvariantTest, climateRouterRangeTest,
-        riverWidthPolicyTest, treeModelFoundationTest
+        riverWidthPolicyTest, treeModelFoundationTest, anatomicalPlanningTest
 }
