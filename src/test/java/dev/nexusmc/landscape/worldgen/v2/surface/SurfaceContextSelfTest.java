@@ -10,6 +10,7 @@ public final class SurfaceContextSelfTest {
     public static void main(String[] args) {
         rejectsInvalidSlope();
         rejectsInvalidUnitFields();
+        rejectsInvalidIdentifiers();
         rejectsInvalidDistances();
         checksDerivedFlags();
     }
@@ -27,13 +28,16 @@ public final class SurfaceContextSelfTest {
         expectFailure(() -> context(0.1, 1.01, 64.0, 0.0, 0.0, 80.0, 0.0));
         expectFailure(() -> context(0.1, 0.0, 64.0, 1.01, 0.0, 80.0, 0.0));
         expectFailure(() -> context(0.1, 0.0, 64.0, 0.0, 1.01, 80.0, 0.0));
-        expectFailure(() -> new SurfaceContext(
-            1L, 0, 0, 80, null, "plains",
-            0.0, 0.0, 0.0, 0.0, 0.0, 80.0,
-            0.5, 0.1, 64.0, 0.0, 0.0, 0.0,
-            64.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-            0.0, 0.0, 0.0, 0.0, 0.5, 0.5
-        ));
+    }
+
+    private static void rejectsInvalidIdentifiers() {
+        expectFailure(() -> createContextWithIdentifiers(null, "plains"));
+        expectFailure(() -> createContextWithIdentifiers("", "plains"));
+        expectFailure(() -> createContextWithIdentifiers("   ", "plains"));
+        expectFailure(() -> createContextWithIdentifiers("minecraft:plains", null));
+        expectFailure(() -> createContextWithIdentifiers("minecraft:plains", ""));
+        expectFailure(() -> createContextWithIdentifiers("minecraft:plains", "  "));
+        createContextWithIdentifiers("minecraft:plains", "plains");
     }
 
     private static void rejectsInvalidDistances() {
@@ -76,6 +80,8 @@ public final class SurfaceContextSelfTest {
         double glacierWeight
     ) {
         return createContext(
+            "minecraft:plains",
+            "plains",
             slope,
             riverMask,
             riverDistance,
@@ -91,6 +97,8 @@ public final class SurfaceContextSelfTest {
         double oceanDistance
     ) {
         return createContext(
+            "minecraft:plains",
+            "plains",
             0.1,
             0.0,
             64.0,
@@ -102,7 +110,27 @@ public final class SurfaceContextSelfTest {
         );
     }
 
+    private static SurfaceContext createContextWithIdentifiers(
+        String biomeKey,
+        String terrainProvince
+    ) {
+        return createContext(
+            biomeKey,
+            terrainProvince,
+            0.1,
+            0.0,
+            64.0,
+            64.0,
+            0.0,
+            0.0,
+            80.0,
+            0.0
+        );
+    }
+
     private static SurfaceContext createContext(
+        String biomeKey,
+        String terrainProvince,
         double slope,
         double riverMask,
         double riverDistance,
@@ -117,8 +145,8 @@ public final class SurfaceContextSelfTest {
             10,
             20,
             (int)elevation,
-            "minecraft:plains",
-            "plains",
+            biomeKey,
+            terrainProvince,
             0.0,
             0.0,
             0.0,
