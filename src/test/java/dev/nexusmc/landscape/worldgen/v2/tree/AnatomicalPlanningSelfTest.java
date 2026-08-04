@@ -1,7 +1,10 @@
 package dev.nexusmc.landscape.worldgen.v2.tree;
 
+import java.util.ArrayDeque;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /** Verifies the staged anatomy decisions introduced by the species technique. */
 public final class AnatomicalPlanningSelfTest {
@@ -12,6 +15,7 @@ public final class AnatomicalPlanningSelfTest {
         verifyDenseForestStretchesTrunk();
         verifyExposureStrengthensRoots();
         verifyBranchFamiliesAreDistinct();
+        verifyRootVoxelsReachTheModel();
         verifyPlanningIsDeterministic();
         System.out.println("AnatomicalPlanningSelfTest: PASS");
     }
@@ -132,6 +136,39 @@ public final class AnatomicalPlanningSelfTest {
             "upper family must occupy a higher band");
     }
 
+    private static void verifyRootVoxelsReachTheModel() {
+        long seed = 0xA11CEB00BL;
+        TreeEnvironment exposed = new TreeEnvironment(
+            0.54, 0.58, 0.16, 0.04,
+            -0.78, 0.32, 0.82, -0.22, 118
+        );
+
+        for (TreeQualityTier quality : new TreeQualityTier[] {
+            TreeQualityTier.MID,
+            TreeQualityTier.HERO
+        }) {
+            TreeLifeHistory history = TreeLifeHistory.generate(
+                seed + quality.ordinal(), quality, exposed
+            );
+            BranchGraph graph = ConiferBranchGenerator.generate(
+                seed + quality.ordinal(), quality, exposed, history
+            );
+            VoxelTreeModel model = TreeVoxelizer.voxelize(
+                seed + quality.ordinal(), quality, graph
+            );
+
+            long undergroundWood = model.wood().stream()
+                .filter(voxel -> voxel.y() < 0)
+                .count();
+            require(undergroundWood > 0,
+                quality + " exposed conifer has no underground root voxels");
+            require(connected(model.wood()),
+                quality + " roots detached the wood model");
+            require(model.leaves().stream().noneMatch(voxel -> voxel.y() < 0),
+                quality + " generated underground foliage");
+        }
+    }
+
     private static void verifyPlanningIsDeterministic() {
         long seed = 912345678L;
         TreeEnvironment environment = new TreeEnvironment(
@@ -167,6 +204,35 @@ public final class AnatomicalPlanningSelfTest {
         );
         require(firstBranches.equals(secondBranches),
             "branch-family planning is not deterministic");
+    }
+
+    private static boolean connected(java.util.List<VoxelTreeModel.Voxel> voxels) {
+        Set<VoxelTreeModel.Voxel> remaining = new HashSet<>(voxels);
+        ArrayDeque<VoxelTreeModel.Voxel> queue = new ArrayDeque<>();
+        VoxelTreeModel.Voxel first = voxels.getFirst();
+        remaining.remove(first);
+        queue.add(first);
+        while (!queue.isEmpty()) {
+            VoxelTreeModel.Voxel current = queue.removeFirst();
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dy = -1; dy <= 1; dy++) {
+                    for (int dz = -1; dz <= 1; dz++) {
+                        if (dx == 0 && dy == 0 && dz == 0) {
+                            continue;
+                        }
+                        VoxelTreeModel.Voxel neighbor = new VoxelTreeModel.Voxel(
+                            current.x() + dx,
+                            current.y() + dy,
+                            current.z() + dz
+                        );
+                        if (remaining.remove(neighbor)) {
+                            queue.add(neighbor);
+                        }
+                    }
+                }
+            }
+        }
+        return remaining.isEmpty();
     }
 
     private static double totalRootReach(RootPlan plan) {
