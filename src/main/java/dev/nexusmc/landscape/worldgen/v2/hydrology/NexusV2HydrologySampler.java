@@ -32,7 +32,27 @@ public final class NexusV2HydrologySampler {
     }
 
     public HydrologyMath.Sample sample(int blockX, int blockZ) {
-        return HydrologyMath.sample(blockX, blockZ, source);
+        HydrologyMath.Sample raw = HydrologyMath.sample(blockX, blockZ, source);
+        if (raw.canonicalSegmentId() == HydrologyMath.NO_NODE
+            || raw.order() >= 3) {
+            return raw;
+        }
+
+        double adjustedDistance = raw.distance()
+            * RiverWidthPolicy.distanceScale(raw.order());
+        double legacyHalfWidth = RiverWidthPolicy.legacyHalfWidth(raw.order());
+        return new HydrologyMath.Sample(
+            adjustedDistance,
+            adjustedDistance - legacyHalfWidth,
+            RiverWidthPolicy.mask(raw.distance(), raw.order()),
+            raw.order(),
+            raw.accumulation(),
+            raw.canonicalSegmentId(),
+            raw.bedY(),
+            raw.waterY(),
+            raw.flowX(),
+            raw.flowZ()
+        );
     }
 
     public HydrologyMath.BasinSample basinSample(int blockX, int blockZ) {
