@@ -34,9 +34,9 @@ public final class TreeModelCache {
         );
         VoxelTreeModel generated = TreeVoxelizer.voxelize(
             graph,
-            plan.species(),
             plan.quality(),
-            plan.seed()
+            plan.seed(),
+            plan.species()
         );
         MODELS.put(key, generated);
         VoxelTreeModel admitted = MODELS.get(key);
