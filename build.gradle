@@ -117,8 +117,16 @@ tasks.register('surfaceNoiseTest', JavaExec) {
     mainClass = 'dev.nexusmc.landscape.worldgen.v2.surface.SurfaceNoiseSelfTest'
 }
 
+tasks.register('surfaceSelectionTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks surface selection identity, palette, weight and depth invariants.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.surface.SurfaceSelectionSelfTest'
+}
+
 tasks.named('check') {
     dependsOn regionalFieldTest, stage6SurfaceTest, stage6VegetationTest,
         stage6CommandTest, boundedCacheTest, stage6ProfilerTest,
-        surfaceNoiseTest
+        surfaceNoiseTest, surfaceSelectionTest
 }
