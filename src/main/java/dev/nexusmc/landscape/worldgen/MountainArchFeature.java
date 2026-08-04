@@ -35,8 +35,10 @@ public final class MountainArchFeature extends Feature<NoneFeatureConfiguration>
 
         BlockPos first = surface(level, origin, alongX ? -halfSpan : 0, alongX ? 0 : -halfSpan);
         BlockPos second = surface(level, origin, alongX ? halfSpan : 0, alongX ? 0 : halfSpan);
+        BlockPos center = surface(level, origin, 0, 0);
         if (!validBase(level, first) || !validBase(level, second)
-            || Math.abs(first.getY() - second.getY()) > 10) {
+            || Math.abs(first.getY() - second.getY()) > 10
+            || !framesDepression(first, second, center)) {
             return false;
         }
 
@@ -68,6 +70,17 @@ public final class MountainArchFeature extends Feature<NoneFeatureConfiguration>
     private static boolean validBase(WorldGenLevel level, BlockPos base) {
         return level.getFluidState(base).isEmpty()
             && !level.getBlockState(base.below()).isAir();
+    }
+
+    private static boolean framesDepression(
+        BlockPos first,
+        BlockPos second,
+        BlockPos center
+    ) {
+        int lowerBase = Math.min(first.getY(), second.getY());
+        int averageBase = (first.getY() + second.getY()) / 2;
+        return center.getY() <= lowerBase - 5
+            && averageBase - center.getY() >= 7;
     }
 
     private static void buildTower(
