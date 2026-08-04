@@ -150,7 +150,9 @@ public final class Stage6Profiler {
             for (int index = 0; index < buckets.length; index++) {
                 cumulative += buckets[index];
                 if (cumulative >= target) {
-                    return index == 0 ? 0L : 1L << Math.min(62, index);
+                    return index == 0
+                        ? 0L
+                        : 1L << Math.min(62, index - 1);
                 }
             }
             return 0L;

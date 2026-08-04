@@ -33,11 +33,21 @@ public record SurfaceProfile(
                 "soilDepth outside [1, 8] for " + biomeId + ": " + soilDepth
             );
         }
+        if (visualTraits == null) {
+            throw new IllegalArgumentException("visualTraits cannot be null");
+        }
         visualTraits = Set.copyOf(visualTraits);
         if (visualTraits.size() < 3) {
             throw new IllegalArgumentException(
                 "surface profile needs three visual traits: " + biomeId
             );
+        }
+        for (String trait : visualTraits) {
+            if (trait == null || trait.isBlank()) {
+                throw new IllegalArgumentException(
+                    "surface profile visual traits cannot be blank: " + biomeId
+                );
+            }
         }
     }
 
@@ -122,6 +132,11 @@ public record SurfaceProfile(
             List<String> values,
             String description
         ) {
+            if (values == null) {
+                throw new IllegalArgumentException(
+                    description + " palette cannot be null"
+                );
+            }
             List<String> result = List.copyOf(values);
             if (result.isEmpty()) {
                 throw new IllegalArgumentException(

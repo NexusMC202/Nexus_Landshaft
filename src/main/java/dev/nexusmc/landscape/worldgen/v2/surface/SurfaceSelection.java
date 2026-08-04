@@ -14,6 +14,12 @@ public record SurfaceSelection(
     int depth
 ) {
     public SurfaceSelection {
+        if (profileId == null || profileId.isBlank()) {
+            throw new IllegalArgumentException("profile id cannot be blank");
+        }
+        if (zone == null) {
+            throw new IllegalArgumentException("selected zone cannot be null");
+        }
         topPalette = List.copyOf(topPalette);
         substratePalette = List.copyOf(substratePalette);
         if (topPalette.isEmpty() || substratePalette.isEmpty()) {

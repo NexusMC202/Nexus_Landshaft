@@ -6,6 +6,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * A strict-capacity memoization map. When full it simply stops admitting new
  * entries; cached and uncached computations must therefore remain identical.
+ *
+ * <p>Writes and clears share one monitor so a clear cannot reset the admitted
+ * count between capacity reservation and insertion. Reads remain lock-free.</p>
  */
 public final class BoundedConcurrentCache<K, V> {
     private final ConcurrentHashMap<K, V> values = new ConcurrentHashMap<>();
@@ -23,7 +26,7 @@ public final class BoundedConcurrentCache<K, V> {
         return values.get(key);
     }
 
-    public void put(K key, V value) {
+    public synchronized void put(K key, V value) {
         if (values.containsKey(key) || !reserve()) {
             return;
         }
@@ -41,7 +44,7 @@ public final class BoundedConcurrentCache<K, V> {
         return capacity;
     }
 
-    public void clear() {
+    public synchronized void clear() {
         values.clear();
         admitted.set(0);
     }

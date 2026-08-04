@@ -37,9 +37,8 @@ public record SurfaceContext(
     double materialNoise
 ) {
     public SurfaceContext {
-        if (biomeKey == null || terrainProvince == null) {
-            throw new IllegalArgumentException("biome/province cannot be null");
-        }
+        biomeKey = requireText(biomeKey, "biomeKey");
+        terrainProvince = requireText(terrainProvince, "terrainProvince");
         requireFinite(temperature, "temperature");
         requireFinite(humidity, "humidity");
         requireFinite(continentalness, "continentalness");
@@ -47,13 +46,13 @@ public record SurfaceContext(
         requireFinite(weirdness, "weirdness");
         requireFinite(elevation, "elevation");
         normalizedHeight = unit(normalizedHeight, "normalizedHeight");
-        requireFinite(slope, "slope");
-        requireFinite(riverDistance, "riverDistance");
+        slope = unit(slope, "slope");
+        riverDistance = nonNegative(riverDistance, "riverDistance");
         riverMask = unit(riverMask, "riverMask");
         riverInfluence = unit(riverInfluence, "riverInfluence");
         lakeBasinMask = unit(lakeBasinMask, "lakeBasinMask");
         coastWeight = unit(coastWeight, "coastWeight");
-        requireFinite(oceanDistance, "oceanDistance");
+        oceanDistance = nonNegative(oceanDistance, "oceanDistance");
         groundwater = unit(groundwater, "groundwater");
         volcanicWeight = unit(volcanicWeight, "volcanicWeight");
         glacierWeight = unit(glacierWeight, "glacierWeight");
@@ -64,9 +63,6 @@ public record SurfaceContext(
         archipelagoWeight = unit(archipelagoWeight, "archipelagoWeight");
         localNoise = unit(localNoise, "localNoise");
         materialNoise = unit(materialNoise, "materialNoise");
-        if (slope < 0.0) {
-            throw new IllegalArgumentException("slope cannot be negative");
-        }
     }
 
     public boolean activeChannel() {
@@ -88,11 +84,30 @@ public record SurfaceContext(
             || glacierWeight >= 0.55;
     }
 
+    private static String requireText(String value, String description) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(
+                description + " cannot be null or blank"
+            );
+        }
+        return value;
+    }
+
     private static double unit(double value, String description) {
         requireFinite(value, description);
         if (value < 0.0 || value > 1.0) {
             throw new IllegalArgumentException(
                 description + " outside [0, 1]: " + value
+            );
+        }
+        return value;
+    }
+
+    private static double nonNegative(double value, String description) {
+        requireFinite(value, description);
+        if (value < 0.0) {
+            throw new IllegalArgumentException(
+                description + " cannot be negative: " + value
             );
         }
         return value;

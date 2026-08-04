@@ -92,7 +92,58 @@ tasks.register('stage6CommandTest', JavaExec) {
     mainClass = 'dev.nexusmc.landscape.command.Stage6CommandPolicySelfTest'
 }
 
+tasks.register('boundedCacheTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks strict cache capacity and concurrent clear/write behavior.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.util.BoundedConcurrentCacheSelfTest'
+}
+
+tasks.register('stage6ProfilerTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks Stage 6 aggregate profiler percentile and reset behavior.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.diagnostics.Stage6ProfilerSelfTest'
+    environment 'NEXUS_LANDSCAPE_PROFILE', '1'
+}
+
+tasks.register('surfaceNoiseTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks deterministic surface noise, range and scale validation.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.surface.SurfaceNoiseSelfTest'
+}
+
+tasks.register('surfaceSelectionTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks surface selection identity, palette, weight and depth invariants.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.surface.SurfaceSelectionSelfTest'
+}
+
+tasks.register('surfaceContextTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks normalized surface context inputs and derived zone flags.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.surface.SurfaceContextSelfTest'
+}
+
+tasks.register('surfaceProfileInvariantTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks surface profile traits, palettes and immutable data invariants.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.surface.SurfaceProfileInvariantSelfTest'
+}
+
 tasks.named('check') {
     dependsOn regionalFieldTest, stage6SurfaceTest, stage6VegetationTest,
-        stage6CommandTest
+        stage6CommandTest, boundedCacheTest, stage6ProfilerTest,
+        surfaceNoiseTest, surfaceSelectionTest, surfaceContextTest,
+        surfaceProfileInvariantTest
 }
