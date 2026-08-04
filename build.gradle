@@ -125,8 +125,16 @@ tasks.register('surfaceSelectionTest', JavaExec) {
     mainClass = 'dev.nexusmc.landscape.worldgen.v2.surface.SurfaceSelectionSelfTest'
 }
 
+tasks.register('surfaceContextTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks normalized surface context inputs and derived zone flags.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.surface.SurfaceContextSelfTest'
+}
+
 tasks.named('check') {
     dependsOn regionalFieldTest, stage6SurfaceTest, stage6VegetationTest,
         stage6CommandTest, boundedCacheTest, stage6ProfilerTest,
-        surfaceNoiseTest, surfaceSelectionTest
+        surfaceNoiseTest, surfaceSelectionTest, surfaceContextTest
 }
