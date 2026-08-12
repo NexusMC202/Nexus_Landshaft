@@ -33,11 +33,11 @@ public final class TreeModelCache {
 
         AnatomyPlan anatomy = AnatomyPlan.resolve(plan);
         BranchGraph graph = SpeciesConiferBranchGenerator.generate(anatomy);
+        CanopyPlan canopy = anatomy.canopy(graph);
         VoxelTreeModel generated = TreeVoxelizer.voxelize(
             graph,
             plan.quality(),
-            plan.seed(),
-            plan.species()
+            canopy
         );
         MODELS.put(key, generated);
         VoxelTreeModel admitted = MODELS.get(key);
