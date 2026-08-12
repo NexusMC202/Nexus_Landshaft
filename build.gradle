@@ -233,6 +233,14 @@ tasks.register('treeGenerationPipelineTest', JavaExec) {
     mainClass = 'dev.nexusmc.landscape.worldgen.v2.tree.TreeGenerationPipelineSelfTest'
 }
 
+tasks.register('treeMaterialProfileTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks explicit species material ids and validation.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.tree.TreeMaterialProfileSelfTest'
+}
+
 tasks.named('check') {
     dependsOn regionalFieldTest, stage6SurfaceTest, stage6VegetationTest,
         stage6CommandTest, boundedCacheTest, stage6ProfilerTest,
@@ -241,5 +249,5 @@ tasks.named('check') {
         riverWidthPolicyTest, treeModelFoundationTest, anatomicalPlanningTest,
         coniferSpeciesEnvelopeTest, treePerformanceTest, segmentRoleTest,
         windDeformationTest, crownBiasMetricsTest, treeRuntimeOutcomeTest,
-        treeGenerationPipelineTest
+        treeGenerationPipelineTest, treeMaterialProfileTest
 }
