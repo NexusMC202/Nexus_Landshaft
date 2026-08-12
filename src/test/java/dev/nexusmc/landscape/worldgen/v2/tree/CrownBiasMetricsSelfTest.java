@@ -11,6 +11,7 @@ public final class CrownBiasMetricsSelfTest {
         verifySyntheticDirectionalBias();
         verifyCalmCrownIsNeutral();
         verifyGeneratedWindyMetricsAreDeterministic();
+        verifySpeciesQualityWindMatrix();
         System.out.println("CrownBiasMetricsSelfTest: PASS");
     }
 
@@ -64,10 +65,7 @@ public final class CrownBiasMetricsSelfTest {
 
     private static void verifyGeneratedWindyMetricsAreDeterministic() {
         long seed = 0x43524F574E424941L;
-        TreeEnvironment windy = new TreeEnvironment(
-            0.62, 0.38, 0.22, 0.04,
-            -0.92, 0.24, 0.68, -0.12, 138
-        );
+        TreeEnvironment windy = windyEnvironment();
         ProceduralTreePlan procedural = new ProceduralTreePlan(
             seed,
             ConiferSpeciesProfile.SPRUCE,
@@ -75,23 +73,94 @@ public final class CrownBiasMetricsSelfTest {
             windy,
             true
         );
-        AnatomyPlan anatomy = AnatomyPlan.resolve(procedural);
-        BranchGraph base = SpeciesConiferBranchGenerator.generate(anatomy);
-        WindDeformationPlan wind = WindDeformationPlan.resolve(anatomy);
-        BranchGraph graph = wind.apply(base, anatomy);
-        CanopyPlan canopy = anatomy.canopy(graph);
-        VoxelTreeModel first = TreeVoxelizer.voxelize(
-            graph, TreeQualityTier.HERO, canopy
-        );
-        VoxelTreeModel second = TreeVoxelizer.voxelize(
-            graph, TreeQualityTier.HERO, canopy
-        );
+        VoxelTreeModel first = generate(procedural);
+        VoxelTreeModel second = generate(procedural);
         CrownBiasMetrics a = CrownBiasMetrics.measure(first, windy);
         CrownBiasMetrics b = CrownBiasMetrics.measure(second, windy);
         require(a.equals(b), "generated crown bias is not deterministic");
         require(a.leafCount() == first.leaves().size(),
             "generated crown leaf count mismatch");
         require(a.sideLeaves() > 0, "windy generated crown has no directional leaves");
+    }
+
+    private static void verifySpeciesQualityWindMatrix() {
+        int index = 0;
+        for (ConiferSpeciesProfile species : ConiferSpeciesProfile.values()) {
+            for (TreeQualityTier quality : TreeQualityTier.values()) {
+                long seed = 0x57494E444D415452L
+                    + index * 0x9E3779B97F4A7C15L;
+                TreeEnvironment windy = windyEnvironment();
+                TreeEnvironment calm = calmEnvironment();
+                ProceduralTreePlan windyPlan = new ProceduralTreePlan(
+                    seed,
+                    species,
+                    quality,
+                    windy,
+                    quality == TreeQualityTier.HERO
+                );
+                ProceduralTreePlan calmPlan = new ProceduralTreePlan(
+                    seed,
+                    species,
+                    quality,
+                    calm,
+                    quality == TreeQualityTier.HERO
+                );
+
+                VoxelTreeModel windyFirst = generate(windyPlan);
+                VoxelTreeModel windySecond = generate(windyPlan);
+                VoxelTreeModel calmModel = generate(calmPlan);
+                CrownBiasMetrics windyMetrics = CrownBiasMetrics.measure(
+                    windyFirst, windy
+                );
+                CrownBiasMetrics calmMetrics = CrownBiasMetrics.measure(
+                    calmModel, calm
+                );
+
+                String label = species + " " + quality;
+                require(windyFirst.fingerprint() == windySecond.fingerprint(),
+                    label + " windy model is not deterministic");
+                require(windyFirst.fingerprint() != calmModel.fingerprint(),
+                    label + " windy model collapsed to calm geometry");
+                require(windyMetrics.leafCount() == windyFirst.leaves().size(),
+                    label + " windy crown leaf count mismatch");
+                require(windyMetrics.sideLeaves() > 0,
+                    label + " windy crown has no directional leaves");
+                require(Double.isFinite(windyMetrics.windProjection()),
+                    label + " windy projection is not finite");
+                require(Double.isFinite(windyMetrics.directionalBalance()),
+                    label + " windy balance is not finite");
+                require(calmMetrics.sideLeaves() == 0,
+                    label + " calm crown has directional leaves");
+                require(calmMetrics.neutralLeaves() == calmMetrics.leafCount(),
+                    label + " calm crown is not fully neutral");
+                require(calmMetrics.windProjection() == 0.0,
+                    label + " calm wind projection must be zero");
+                index++;
+            }
+        }
+    }
+
+    private static VoxelTreeModel generate(ProceduralTreePlan procedural) {
+        AnatomyPlan anatomy = AnatomyPlan.resolve(procedural);
+        BranchGraph base = SpeciesConiferBranchGenerator.generate(anatomy);
+        WindDeformationPlan wind = WindDeformationPlan.resolve(anatomy);
+        BranchGraph graph = wind.apply(base, anatomy);
+        CanopyPlan canopy = anatomy.canopy(graph);
+        return TreeVoxelizer.voxelize(graph, procedural.quality(), canopy);
+    }
+
+    private static TreeEnvironment windyEnvironment() {
+        return new TreeEnvironment(
+            0.62, 0.38, 0.22, 0.04,
+            -0.92, 0.24, 0.68, -0.12, 138
+        );
+    }
+
+    private static TreeEnvironment calmEnvironment() {
+        return new TreeEnvironment(
+            0.62, 0.38, 0.22, 0.04,
+            0.0, 0.0, 0.68, -0.12, 138
+        );
     }
 
     private static void require(boolean condition, String message) {
