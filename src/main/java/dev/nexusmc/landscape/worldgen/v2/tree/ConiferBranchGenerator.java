@@ -5,8 +5,7 @@ import java.util.List;
 
 /**
  * Pure deterministic conifer skeleton generator driven by explicit anatomical
- * plans. The tree resolves its trunk, roots and distinct branch families before
- * any graph segment is emitted.
+ * plans. The complete anatomy is resolved before any graph segment is emitted.
  */
 public final class ConiferBranchGenerator {
     private static final double GOLDEN_ANGLE = 2.399963229728653;
@@ -14,6 +13,7 @@ public final class ConiferBranchGenerator {
     private ConiferBranchGenerator() {
     }
 
+    /** Compatibility path for older pure callers using generic conifer anatomy. */
     public static BranchGraph generate(
         long seed,
         TreeQualityTier quality,
@@ -23,13 +23,41 @@ public final class ConiferBranchGenerator {
         if (quality == null || environment == null || history == null) {
             throw new IllegalArgumentException("conifer generation inputs are required");
         }
-
         TrunkPlan trunk = TrunkPlan.resolve(seed, quality, environment, history);
         RootPlan roots = RootPlan.resolve(seed, quality, environment, history, trunk);
         BranchFamilyPlan branchFamilies = BranchFamilyPlan.resolve(
             seed, quality, environment, history, trunk
         );
+        return generateFromPlans(
+            seed, quality, environment, history, trunk, roots, branchFamilies
+        );
+    }
 
+    /** Main optimized path: all anatomical planning has already happened once. */
+    public static BranchGraph generate(AnatomyPlan anatomy) {
+        if (anatomy == null) {
+            throw new IllegalArgumentException("anatomy plan is required");
+        }
+        return generateFromPlans(
+            anatomy.seed(),
+            anatomy.quality(),
+            anatomy.environment(),
+            anatomy.history(),
+            anatomy.trunk(),
+            anatomy.roots(),
+            anatomy.branchFamilies()
+        );
+    }
+
+    private static BranchGraph generateFromPlans(
+        long seed,
+        TreeQualityTier quality,
+        TreeEnvironment environment,
+        TreeLifeHistory history,
+        TrunkPlan trunk,
+        RootPlan roots,
+        BranchFamilyPlan branchFamilies
+    ) {
         List<BranchGraph.Segment> segments = new ArrayList<>();
         int budget = quality.budget().maxBranchSegments();
         int nextId = appendTrunk(segments, trunk);
@@ -41,13 +69,13 @@ public final class ConiferBranchGenerator {
             environment,
             history,
             seed,
+            quality,
             nextId,
             budget
         );
         appendSecondaryLeader(
             segments, trunk, environment, history, nextId, budget
         );
-
         return new BranchGraph(segments);
     }
 
@@ -59,7 +87,6 @@ public final class ConiferBranchGenerator {
         double startX = 0.0;
         double startY = 0.0;
         double startZ = 0.0;
-
         for (int section = 0; section < trunk.sections(); section++) {
             double t0 = section / (double)trunk.sections();
             double t1 = (section + 1.0) / trunk.sections();
@@ -68,17 +95,10 @@ public final class ConiferBranchGenerator {
             double endZ = trunk.leanZ() * t1 * t1;
             int id = segments.size();
             segments.add(new BranchGraph.Segment(
-                id,
-                previous,
-                startX,
-                startY,
-                startZ,
-                endX,
-                endY,
-                endZ,
-                trunk.radiusAt(t0),
-                trunk.radiusAt(t1),
-                false
+                id, previous,
+                startX, startY, startZ,
+                endX, endY, endZ,
+                trunk.radiusAt(t0), trunk.radiusAt(t1), false
             ));
             previous = id;
             startX = endX;
@@ -128,12 +148,12 @@ public final class ConiferBranchGenerator {
         TreeEnvironment environment,
         TreeLifeHistory history,
         long seed,
+        TreeQualityTier quality,
         int nextId,
         int budget
     ) {
         long state = TreeLifeHistory.mix(seed ^ 0x414E41544F4D594CL);
         int familyOrdinal = 0;
-
         for (BranchFamilyPlan.Family family : plan.families()) {
             for (int index = 0;
                  index < family.targetCount() && nextId < budget;
@@ -151,7 +171,6 @@ public final class ConiferBranchGenerator {
                     + index * GOLDEN_ANGLE
                     + familyOrdinal * 0.43
                     + (TreeLifeHistory.unit(TreeLifeHistory.mix(state)) - 0.5) * 0.46;
-
                 double bandPosition = normalizedBandPosition(family, vertical);
                 double familyShape = familyLengthShape(family.kind(), bandPosition);
                 double length = family.baseLength()
@@ -175,8 +194,7 @@ public final class ConiferBranchGenerator {
                 double radialX = Math.cos(angle) * length;
                 double radialZ = Math.sin(angle) * length;
                 double verticalOffset = length * family.upwardLift()
-                    - length * family.droop()
-                    * (0.72 + vertical * 0.38);
+                    - length * family.droop() * (0.72 + vertical * 0.38);
 
                 boolean dead = !family.foliageBearing()
                     || TreeLifeHistory.unit(
@@ -184,8 +202,7 @@ public final class ConiferBranchGenerator {
                     ) < family.deadProbability();
                 double startRadius = Math.max(
                     0.20,
-                    trunk.radiusAt(vertical)
-                        * branchThickness(family.kind())
+                    trunk.radiusAt(vertical) * branchThickness(family.kind())
                 );
                 double endRadius = dead
                     ? 0.0
@@ -207,7 +224,7 @@ public final class ConiferBranchGenerator {
                 nextId++;
 
                 if (shouldAddSecondaryBranch(
-                    family, qualityFromBudget(budget), index, countDivisor, state
+                    family, quality, index, countDivisor, state
                 ) && nextId < budget) {
                     double sideAngle = angle
                         + (TreeLifeHistory.unit(TreeLifeHistory.mix(state ^ 91L)) > 0.5
@@ -321,16 +338,6 @@ public final class ConiferBranchGenerator {
         chance *= 0.90 + index / countDivisor * 0.20;
         return TreeLifeHistory.unit(TreeLifeHistory.mix(state ^ 0x5345434F4E444152L))
             < chance;
-    }
-
-    private static TreeQualityTier qualityFromBudget(int budget) {
-        if (budget == TreeQualityTier.HERO.budget().maxBranchSegments()) {
-            return TreeQualityTier.HERO;
-        }
-        if (budget == TreeQualityTier.MID.budget().maxBranchSegments()) {
-            return TreeQualityTier.MID;
-        }
-        return TreeQualityTier.BASIC;
     }
 
     private static int trunkParentFor(double vertical, int trunkSections) {
