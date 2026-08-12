@@ -47,13 +47,16 @@ public final class TreeModelFoundationSelfTest {
     private static void verifyGraph() {
         BranchGraph graph = new BranchGraph(List.of(
             new BranchGraph.Segment(
-                0, -1, 0, 0, 0, 0, 8, 0, 1.4, 0.8, false
+                0, -1, 0, 0, 0, 0, 8, 0, 1.4, 0.8,
+                SegmentRole.TRUNK
             ),
             new BranchGraph.Segment(
-                1, 0, 0, 5, 0, 4, 8, 1, 0.7, 0.2, false
+                1, 0, 0, 5, 0, 4, 8, 1, 0.7, 0.2,
+                SegmentRole.LIVE_BRANCH
             ),
             new BranchGraph.Segment(
-                2, 0, 0, 6, 0, -3, 9, -2, 0.6, 0.0, true
+                2, 0, 0, 6, 0, -3, 9, -2, 0.6, 0.0,
+                SegmentRole.DEAD_BRANCH
             )
         ));
         BranchGraph identical = new BranchGraph(graph.segments());
@@ -62,10 +65,12 @@ public final class TreeModelFoundationSelfTest {
         require(graph.childrenOf(0).size() == 2, "branch children mismatch");
         expectFailure(() -> new BranchGraph(List.of(
             new BranchGraph.Segment(
-                0, -1, 0, 0, 0, 0, 4, 0, 1, 0.5, false
+                0, -1, 0, 0, 0, 0, 4, 0, 1, 0.5,
+                SegmentRole.TRUNK
             ),
             new BranchGraph.Segment(
-                1, 99, 0, 2, 0, 1, 3, 0, 0.4, 0.1, false
+                1, 99, 0, 2, 0, 1, 3, 0, 0.4, 0.1,
+                SegmentRole.LIVE_BRANCH
             )
         )));
     }
