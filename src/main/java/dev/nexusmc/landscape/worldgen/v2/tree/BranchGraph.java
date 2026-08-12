@@ -27,6 +27,9 @@ public record BranchGraph(List<Segment> segments) {
                 if (segment.parentId() != -1) {
                     throw new IllegalArgumentException("root branch must use parent -1");
                 }
+                if (segment.role() != SegmentRole.TRUNK) {
+                    throw new IllegalArgumentException("first segment must be trunk");
+                }
             } else if (!completed.contains(segment.parentId())) {
                 throw new IllegalArgumentException(
                     "parent must precede child: " + segment.parentId()
@@ -49,7 +52,7 @@ public record BranchGraph(List<Segment> segments) {
             hash = mix(hash, Double.doubleToLongBits(segment.endZ()));
             hash = mix(hash, Double.doubleToLongBits(segment.startRadius()));
             hash = mix(hash, Double.doubleToLongBits(segment.endRadius()));
-            hash = mix(hash, segment.dead() ? 1 : 0);
+            hash = mix(hash, segment.role().ordinal());
         }
         return hash;
     }
@@ -80,9 +83,12 @@ public record BranchGraph(List<Segment> segments) {
         double endZ,
         double startRadius,
         double endRadius,
-        boolean dead
+        SegmentRole role
     ) {
         public Segment {
+            if (role == null) {
+                throw new IllegalArgumentException("segment role is required");
+            }
             finite(startX, "startX");
             finite(startY, "startY");
             finite(startZ, "startZ");
@@ -100,6 +106,40 @@ public record BranchGraph(List<Segment> segments) {
             if (Math.sqrt(square(dx) + square(dy) + square(dz)) < 0.25) {
                 throw new IllegalArgumentException("branch segment is too short");
             }
+        }
+
+        /** Compatibility constructor for older tests and pure callers. */
+        public Segment(
+            int id,
+            int parentId,
+            double startX,
+            double startY,
+            double startZ,
+            double endX,
+            double endY,
+            double endZ,
+            double startRadius,
+            double endRadius,
+            boolean dead
+        ) {
+            this(
+                id,
+                parentId,
+                startX,
+                startY,
+                startZ,
+                endX,
+                endY,
+                endZ,
+                startRadius,
+                endRadius,
+                dead ? SegmentRole.DEAD_BRANCH : SegmentRole.LIVE_BRANCH
+            );
+        }
+
+        /** Compatibility accessor; roots are no longer treated as dead wood. */
+        public boolean dead() {
+            return role.deadWood();
         }
 
         public double length() {
