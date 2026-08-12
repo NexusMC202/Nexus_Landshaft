@@ -23,7 +23,7 @@ public record CanopyPlan(List<Cluster> clusters) {
         double crownTop = crownTop(graph);
         List<Cluster> clusters = new ArrayList<>();
         for (BranchGraph.Segment segment : graph.segments()) {
-            if (segment.dead() || segment.endRadius() > 0.72) {
+            if (!segment.role().canCarryFoliage() || segment.endRadius() > 0.72) {
                 continue;
             }
             Cluster cluster = anatomy.species() == ConiferSpeciesProfile.PINE
@@ -104,7 +104,7 @@ public record CanopyPlan(List<Cluster> clusters) {
     private static double crownTop(BranchGraph graph) {
         double top = 0.0;
         for (BranchGraph.Segment segment : graph.segments()) {
-            if (!segment.dead()) {
+            if (segment.role().canCarryFoliage()) {
                 top = Math.max(top, Math.max(segment.startY(), segment.endY()));
             }
         }
