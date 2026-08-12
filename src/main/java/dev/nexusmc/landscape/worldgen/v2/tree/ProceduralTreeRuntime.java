@@ -4,7 +4,10 @@ import java.util.HashSet;
 import java.util.Set;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.WorldGenLevel;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LeavesBlock;
 import net.minecraft.world.level.block.RotatedPillarBlock;
@@ -61,7 +64,7 @@ public final class ProceduralTreeRuntime {
         if (!canPlace(level, base, model)) {
             return Placement.afterLookup(false, lookup.cacheHit());
         }
-        placeModel(level, base, model);
+        placeModel(level, base, model, plan.species().materialProfile());
         return Placement.afterLookup(true, lookup.cacheHit());
     }
 
@@ -116,7 +119,7 @@ public final class ProceduralTreeRuntime {
         if (!canPlace(level, base, model)) {
             return false;
         }
-        placeModel(level, base, model);
+        placeModel(level, base, model, species.materialProfile());
         return true;
     }
 
@@ -245,11 +248,14 @@ public final class ProceduralTreeRuntime {
     private static void placeModel(
         WorldGenLevel level,
         BlockPos base,
-        VoxelTreeModel model
+        VoxelTreeModel model,
+        TreeMaterialProfile materials
     ) {
+        Block logBlock = resolveBlock(materials.logBlockId());
+        Block leavesBlock = resolveBlock(materials.leavesBlockId());
         Set<VoxelTreeModel.Voxel> wood = new HashSet<>(model.wood());
         for (VoxelTreeModel.Voxel voxel : model.wood()) {
-            BlockState log = Blocks.SPRUCE_LOG.defaultBlockState();
+            BlockState log = logBlock.defaultBlockState();
             if (log.hasProperty(RotatedPillarBlock.AXIS)) {
                 log = log.setValue(
                     RotatedPillarBlock.AXIS,
@@ -258,13 +264,21 @@ public final class ProceduralTreeRuntime {
             }
             level.setBlock(absolute(base, voxel), log, 2);
         }
-        BlockState leaves = Blocks.SPRUCE_LEAVES.defaultBlockState();
+        BlockState leaves = leavesBlock.defaultBlockState();
         if (leaves.hasProperty(LeavesBlock.PERSISTENT)) {
             leaves = leaves.setValue(LeavesBlock.PERSISTENT, true);
         }
         for (VoxelTreeModel.Voxel voxel : model.leaves()) {
             level.setBlock(absolute(base, voxel), leaves, 2);
         }
+    }
+
+    private static Block resolveBlock(String id) {
+        ResourceLocation location = ResourceLocation.parse(id);
+        return BuiltInRegistries.BLOCK.getOptional(location)
+            .orElseThrow(() -> new IllegalStateException(
+                "unknown tree material block: " + id
+            ));
     }
 
     private static Direction.Axis dominantAxis(
