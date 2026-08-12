@@ -51,6 +51,7 @@ public record TreePlacementEnvelope(
             * (0.88 + environment.openSpaceStrength() * 0.24)
             * (1.0 - environment.forestCompetition() * 0.12);
         int radius = (int)Math.ceil(baseRadius * radiusScale);
+        radius += WindDeformationPlan.conservativeExtraRadius(quality, environment);
         radius = Math.max(2, Math.min(radius, quality.budget().maxHorizontalRadius()));
 
         int underground = quality == TreeQualityTier.BASIC ? 1 : 2;
