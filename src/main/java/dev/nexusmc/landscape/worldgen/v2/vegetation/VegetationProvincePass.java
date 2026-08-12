@@ -119,6 +119,8 @@ public final class VegetationProvincePass {
             + value(telemetry.treeV2Placed, reset) + '\n'
             + "vegetation.tree_v2_collisions="
             + value(telemetry.treeV2Collisions, reset) + '\n'
+            + "vegetation.tree_v2_quota_rejected="
+            + value(telemetry.treeV2QuotaRejected, reset) + '\n'
             + "vegetation.tree_v2_disabled="
             + value(telemetry.treeV2Disabled, reset) + '\n'
             + "vegetation.tree_v2_fallback="
@@ -329,6 +331,8 @@ public final class VegetationProvincePass {
                         Math.sin(openAngle) * openStrength
                     );
 
+                boolean intentionallySkipped = outcome.result()
+                    == ProceduralTreeIntegration.Result.QUOTA_REJECTED;
                 boolean placed;
                 if (outcome.result()
                     == ProceduralTreeIntegration.Result.PLACED) {
@@ -341,7 +345,6 @@ public final class VegetationProvincePass {
                     if (outcome.result()
                         != ProceduralTreeIntegration.Result.UNSUPPORTED) {
                         telemetry.treeV2Attempts.increment();
-                        telemetry.treeV2Fallback.increment();
                         if (outcome.quality() != null) {
                             telemetry.treeV2Quality[outcome.quality().ordinal()]
                                 .increment();
@@ -350,11 +353,22 @@ public final class VegetationProvincePass {
                             == ProceduralTreeIntegration.Result.COLLISION) {
                             telemetry.treeV2Collisions.increment();
                         } else if (outcome.result()
+                            == ProceduralTreeIntegration.Result.QUOTA_REJECTED) {
+                            telemetry.treeV2QuotaRejected.increment();
+                        } else if (outcome.result()
                             == ProceduralTreeIntegration.Result.DISABLED) {
                             telemetry.treeV2Disabled.increment();
                         }
                     }
-                    placed = buildTree(level, base, shape, oldGrowth);
+                    if (outcome.shouldFallback()) {
+                        if (outcome.result()
+                            != ProceduralTreeIntegration.Result.UNSUPPORTED) {
+                            telemetry.treeV2Fallback.increment();
+                        }
+                        placed = buildTree(level, base, shape, oldGrowth);
+                    } else {
+                        placed = false;
+                    }
                 }
                 Stage6Profiler.record(
                     Stage6Profiler.Phase.VEGETATION_BLOCK_PLACEMENT,
@@ -362,7 +376,7 @@ public final class VegetationProvincePass {
                 );
                 if (placed) {
                     telemetry.trees.increment();
-                } else {
+                } else if (!intentionallySkipped) {
                     telemetry.treeRejectedOther.increment();
                 }
             }
@@ -786,6 +800,7 @@ public final class VegetationProvincePass {
         private final LongAdder treeV2Attempts = new LongAdder();
         private final LongAdder treeV2Placed = new LongAdder();
         private final LongAdder treeV2Collisions = new LongAdder();
+        private final LongAdder treeV2QuotaRejected = new LongAdder();
         private final LongAdder treeV2Disabled = new LongAdder();
         private final LongAdder treeV2Fallback = new LongAdder();
         private final LongAdder[] treeV2Quality =
