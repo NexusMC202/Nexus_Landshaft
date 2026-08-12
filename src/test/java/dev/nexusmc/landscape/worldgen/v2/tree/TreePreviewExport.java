@@ -15,9 +15,9 @@ import java.util.Map;
  * resources.
  */
 public final class TreePreviewExport {
-    private static final int FORMAT_VERSION = 6;
+    private static final int FORMAT_VERSION = 7;
     private static final String GENERATOR_ID =
-        "nexus_landscape:conifer_species_wind_bias_v6";
+        "nexus_landscape:conifer_species_materials_v7";
     private static final Gson GSON = new GsonBuilder()
         .setPrettyPrinting()
         .create();
@@ -86,6 +86,7 @@ public final class TreePreviewExport {
                         FORMAT_VERSION,
                         GENERATOR_ID,
                         species,
+                        species.materialProfile(),
                         entry.getKey(),
                         seed,
                         quality,
@@ -214,6 +215,7 @@ public final class TreePreviewExport {
         int format,
         String generator,
         ConiferSpeciesProfile species,
+        TreeMaterialProfile materialProfile,
         String environmentName,
         long seed,
         TreeQualityTier quality,
