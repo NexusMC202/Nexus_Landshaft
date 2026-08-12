@@ -193,11 +193,19 @@ tasks.register('treePerformanceTest', JavaExec) {
     mainClass = 'dev.nexusmc.landscape.worldgen.v2.tree.TreePerformanceSelfTest'
 }
 
+tasks.register('segmentRoleTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks explicit trunk, root, live, dead and secondary-leader segment roles.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.tree.SegmentRoleSelfTest'
+}
+
 tasks.named('check') {
     dependsOn regionalFieldTest, stage6SurfaceTest, stage6VegetationTest,
         stage6CommandTest, boundedCacheTest, stage6ProfilerTest,
         surfaceNoiseTest, surfaceSelectionTest, surfaceContextTest,
         surfaceProfileInvariantTest, climateRouterRangeTest,
         riverWidthPolicyTest, treeModelFoundationTest, anatomicalPlanningTest,
-        coniferSpeciesEnvelopeTest, treePerformanceTest
+        coniferSpeciesEnvelopeTest, treePerformanceTest, segmentRoleTest
 }
