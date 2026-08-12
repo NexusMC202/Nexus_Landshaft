@@ -9,7 +9,7 @@ import java.util.Locale;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
 
-/** Read-only operator diagnostics for procedural tree generation. */
+/** Operator diagnostics for procedural tree generation. */
 public final class TreeDebugCommand {
     private TreeDebugCommand() {
     }
@@ -32,6 +32,7 @@ public final class TreeDebugCommand {
         TreeModelCache.Snapshot cache = TreeModelCache.snapshot();
         TreeModelCache.StructureSnapshot structure =
             TreeModelCache.structureSnapshot();
+        TreeModelCache.CrownSnapshot crown = TreeModelCache.crownSnapshot();
         send(source, "Nexus procedural tree counters");
         send(source, String.format(
             Locale.ROOT,
@@ -70,6 +71,24 @@ public final class TreeDebugCommand {
             structure.liveBranchSegments(),
             structure.deadBranchSegments(),
             structure.secondaryLeaderSegments()
+        ));
+        send(source, String.format(
+            Locale.ROOT,
+            "crown_leaves=%d leeward=%d windward=%d neutral=%d "
+                + "leeward_share=%.3f balance=%.3f",
+            crown.leafCount(),
+            crown.leewardLeaves(),
+            crown.windwardLeaves(),
+            crown.neutralLeaves(),
+            crown.leewardShare(),
+            crown.directionalBalance()
+        ));
+        send(source, String.format(
+            Locale.ROOT,
+            "crown_center_x=%.3f crown_center_z=%.3f wind_projection=%.3f",
+            crown.centerX(),
+            crown.centerZ(),
+            crown.windProjection()
         ));
         return 1;
     }
