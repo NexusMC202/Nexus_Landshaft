@@ -107,13 +107,12 @@ public final class ProceduralTreeRuntime {
             return false;
         }
 
-        TreeLifeHistory history = TreeLifeHistory.generate(seed, quality, environment);
-        BranchGraph graph = SpeciesConiferBranchGenerator.generate(
-            seed, species, quality, environment, history
-        );
-        VoxelTreeModel model = TreeVoxelizer.voxelize(
-            graph, quality, seed, species
-        );
+        VoxelTreeModel model = TreeGenerationPipeline.generate(
+            seed,
+            species,
+            quality,
+            environment
+        ).model();
         if (!canPlace(level, base, model)) {
             return false;
         }
