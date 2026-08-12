@@ -61,6 +61,10 @@ public record AnatomyPlan(
         );
     }
 
+    public CanopyPlan canopy(BranchGraph graph) {
+        return CanopyPlan.resolve(graph, this);
+    }
+
     public long fingerprint() {
         long hash = seed ^ ((long)species.ordinal() << 61)
             ^ ((long)quality.ordinal() << 57);
