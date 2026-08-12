@@ -95,10 +95,17 @@ public final class ConiferBranchGenerator {
             double endZ = trunk.leanZ() * t1 * t1;
             int id = segments.size();
             segments.add(new BranchGraph.Segment(
-                id, previous,
-                startX, startY, startZ,
-                endX, endY, endZ,
-                trunk.radiusAt(t0), trunk.radiusAt(t1), false
+                id,
+                previous,
+                startX,
+                startY,
+                startZ,
+                endX,
+                endY,
+                endZ,
+                trunk.radiusAt(t0),
+                trunk.radiusAt(t1),
+                SegmentRole.TRUNK
             ));
             previous = id;
             startX = endX;
@@ -134,7 +141,7 @@ public final class ConiferBranchGenerator {
                 root.endZ(),
                 startRadius,
                 root.endRadius(),
-                true
+                SegmentRole.ROOT
             ));
             nextId++;
         }
@@ -200,6 +207,9 @@ public final class ConiferBranchGenerator {
                     || TreeLifeHistory.unit(
                         TreeLifeHistory.mix(state ^ 0x444541444252414EL)
                     ) < family.deadProbability();
+                SegmentRole role = dead
+                    ? SegmentRole.DEAD_BRANCH
+                    : SegmentRole.LIVE_BRANCH;
                 double startRadius = Math.max(
                     0.20,
                     trunk.radiusAt(vertical) * branchThickness(family.kind())
@@ -219,7 +229,7 @@ public final class ConiferBranchGenerator {
                     attachZ + radialZ,
                     startRadius,
                     endRadius,
-                    dead
+                    role
                 ));
                 nextId++;
 
@@ -244,7 +254,7 @@ public final class ConiferBranchGenerator {
                         branchEndZ + Math.sin(sideAngle) * secondaryLength,
                         Math.max(0.10, startRadius * 0.32),
                         dead ? 0.0 : 0.05,
-                        dead
+                        role
                     ));
                     nextId++;
                 }
@@ -286,7 +296,7 @@ public final class ConiferBranchGenerator {
             startZ + environment.openSpaceZ() * trunk.height() * 0.07,
             Math.max(0.24, trunk.radiusAt(split) * 0.60),
             0.10,
-            false
+            SegmentRole.SECONDARY_LEADER
         ));
     }
 
