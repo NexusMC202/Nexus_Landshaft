@@ -31,16 +31,8 @@ public final class TreeModelCache {
         }
         MISSES.increment();
 
-        TreeLifeHistory history = TreeLifeHistory.generate(
-            plan.seed(), plan.quality(), plan.environment()
-        );
-        BranchGraph graph = SpeciesConiferBranchGenerator.generate(
-            plan.seed(),
-            plan.species(),
-            plan.quality(),
-            plan.environment(),
-            history
-        );
+        AnatomyPlan anatomy = AnatomyPlan.resolve(plan);
+        BranchGraph graph = SpeciesConiferBranchGenerator.generate(anatomy);
         VoxelTreeModel generated = TreeVoxelizer.voxelize(
             graph,
             plan.quality(),
