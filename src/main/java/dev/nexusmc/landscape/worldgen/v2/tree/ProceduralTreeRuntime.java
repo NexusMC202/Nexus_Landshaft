@@ -42,7 +42,7 @@ public final class ProceduralTreeRuntime {
             throw new IllegalArgumentException("tree plan is required");
         }
         if (!enabled()) {
-            return new Placement(false, false);
+            return Placement.withoutLookup(false);
         }
         requireRuntimeInputs(
             level,
@@ -53,16 +53,16 @@ public final class ProceduralTreeRuntime {
             plan.envelope()
         );
         if (!canFitEnvelope(level, base, plan.envelope())) {
-            return new Placement(false, false);
+            return Placement.withoutLookup(false);
         }
 
         TreeModelCache.Lookup lookup = TreeModelCache.getOrCreateDetailed(plan);
         VoxelTreeModel model = lookup.model();
         if (!canPlace(level, base, model)) {
-            return new Placement(false, lookup.cacheHit());
+            return Placement.afterLookup(false, lookup.cacheHit());
         }
         placeModel(level, base, model);
-        return new Placement(true, lookup.cacheHit());
+        return Placement.afterLookup(true, lookup.cacheHit());
     }
 
     /** Compatibility overload for older tests and callers; resolves as spruce. */
@@ -312,6 +312,25 @@ public final class ProceduralTreeRuntime {
         return base.offset(voxel.x(), voxel.y(), voxel.z());
     }
 
-    public record Placement(boolean placed, boolean cacheHit) {
+    public record Placement(
+        boolean placed,
+        boolean cacheLookupPerformed,
+        boolean cacheHit
+    ) {
+        public Placement {
+            if (cacheHit && !cacheLookupPerformed) {
+                throw new IllegalArgumentException(
+                    "cache hit requires a performed lookup"
+                );
+            }
+        }
+
+        public static Placement withoutLookup(boolean placed) {
+            return new Placement(placed, false, false);
+        }
+
+        public static Placement afterLookup(boolean placed, boolean cacheHit) {
+            return new Placement(placed, true, cacheHit);
+        }
     }
 }
