@@ -11,6 +11,11 @@ public final class TreeModelCache {
         new BoundedConcurrentCache<>(DEFAULT_CAPACITY);
     private static final LongAdder HITS = new LongAdder();
     private static final LongAdder MISSES = new LongAdder();
+    private static final LongAdder TRUNK_SEGMENTS = new LongAdder();
+    private static final LongAdder ROOT_SEGMENTS = new LongAdder();
+    private static final LongAdder LIVE_BRANCH_SEGMENTS = new LongAdder();
+    private static final LongAdder DEAD_BRANCH_SEGMENTS = new LongAdder();
+    private static final LongAdder SECONDARY_LEADER_SEGMENTS = new LongAdder();
 
     private TreeModelCache() {
     }
@@ -33,6 +38,7 @@ public final class TreeModelCache {
 
         AnatomyPlan anatomy = AnatomyPlan.resolve(plan);
         BranchGraph graph = SpeciesConiferBranchGenerator.generate(anatomy);
+        recordRoles(graph);
         CanopyPlan canopy = anatomy.canopy(graph);
         VoxelTreeModel generated = TreeVoxelizer.voxelize(
             graph,
@@ -44,12 +50,34 @@ public final class TreeModelCache {
         return new Lookup(admitted != null ? admitted : generated, false);
     }
 
+    private static void recordRoles(BranchGraph graph) {
+        for (BranchGraph.Segment segment : graph.segments()) {
+            switch (segment.role()) {
+                case TRUNK -> TRUNK_SEGMENTS.increment();
+                case ROOT -> ROOT_SEGMENTS.increment();
+                case LIVE_BRANCH -> LIVE_BRANCH_SEGMENTS.increment();
+                case DEAD_BRANCH -> DEAD_BRANCH_SEGMENTS.increment();
+                case SECONDARY_LEADER -> SECONDARY_LEADER_SEGMENTS.increment();
+            }
+        }
+    }
+
     public static Snapshot snapshot() {
         return new Snapshot(
             MODELS.size(),
             MODELS.capacity(),
             HITS.sum(),
             MISSES.sum()
+        );
+    }
+
+    public static StructureSnapshot structureSnapshot() {
+        return new StructureSnapshot(
+            TRUNK_SEGMENTS.sum(),
+            ROOT_SEGMENTS.sum(),
+            LIVE_BRANCH_SEGMENTS.sum(),
+            DEAD_BRANCH_SEGMENTS.sum(),
+            SECONDARY_LEADER_SEGMENTS.sum()
         );
     }
 
@@ -65,6 +93,11 @@ public final class TreeModelCache {
         MODELS.clear();
         HITS.reset();
         MISSES.reset();
+        TRUNK_SEGMENTS.reset();
+        ROOT_SEGMENTS.reset();
+        LIVE_BRANCH_SEGMENTS.reset();
+        DEAD_BRANCH_SEGMENTS.reset();
+        SECONDARY_LEADER_SEGMENTS.reset();
     }
 
     public record Lookup(VoxelTreeModel model, boolean cacheHit) {
@@ -95,6 +128,27 @@ public final class TreeModelCache {
         public double hitRate() {
             long total = requests();
             return total == 0L ? 0.0 : hits / (double)total;
+        }
+    }
+
+    public record StructureSnapshot(
+        long trunkSegments,
+        long rootSegments,
+        long liveBranchSegments,
+        long deadBranchSegments,
+        long secondaryLeaderSegments
+    ) {
+        public StructureSnapshot {
+            if (trunkSegments < 0L || rootSegments < 0L
+                || liveBranchSegments < 0L || deadBranchSegments < 0L
+                || secondaryLeaderSegments < 0L) {
+                throw new IllegalArgumentException("invalid tree structure snapshot");
+            }
+        }
+
+        public long totalSegments() {
+            return trunkSegments + rootSegments + liveBranchSegments
+                + deadBranchSegments + secondaryLeaderSegments;
         }
     }
 }
