@@ -203,10 +203,18 @@ tasks.register('segmentRoleTest', JavaExec) {
 
 tasks.register('windDeformationTest', JavaExec) {
     group = 'verification'
-    description = 'Checks deterministic wind deformation, topology preservation and envelope reserve.'
+    description = 'Checks deterministic wind deformation, directional asymmetry and conservative bounds.'
     dependsOn testClasses
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'dev.nexusmc.landscape.worldgen.v2.tree.WindDeformationSelfTest'
+}
+
+tasks.register('crownBiasMetricsTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks crown center-of-mass and leeward/windward bias measurements.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.tree.CrownBiasMetricsSelfTest'
 }
 
 tasks.named('check') {
@@ -216,5 +224,5 @@ tasks.named('check') {
         surfaceProfileInvariantTest, climateRouterRangeTest,
         riverWidthPolicyTest, treeModelFoundationTest, anatomicalPlanningTest,
         coniferSpeciesEnvelopeTest, treePerformanceTest, segmentRoleTest,
-        windDeformationTest
+        windDeformationTest, crownBiasMetricsTest
 }
