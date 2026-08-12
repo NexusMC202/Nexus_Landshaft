@@ -30,6 +30,11 @@ public final class TreePerformanceSelfTest {
                 require(!cold.model().leaves().isEmpty(), "generated tree has no leaves");
                 totalVoxels += cold.model().wood().size() + cold.model().leaves().size();
 
+                TreeModelCache.StructureSnapshot afterCold =
+                    TreeModelCache.structureSnapshot();
+                require(afterCold.totalSegments() > 0L,
+                    "cold generation must record structural roles");
+
                 for (int repeat = 0; repeat < REPEATS_PER_PLAN; repeat++) {
                     long hitStarted = System.nanoTime();
                     TreeModelCache.Lookup repeated =
@@ -39,11 +44,18 @@ public final class TreePerformanceSelfTest {
                     require(repeated.model() == cold.model(),
                         "cache hit must reuse the admitted model instance");
                 }
+
+                TreeModelCache.StructureSnapshot afterHits =
+                    TreeModelCache.structureSnapshot();
+                require(afterHits.equals(afterCold),
+                    "cache hits must not inflate structural role counters");
                 plans++;
             }
         }
 
         TreeModelCache.Snapshot snapshot = TreeModelCache.snapshot();
+        TreeModelCache.StructureSnapshot structure =
+            TreeModelCache.structureSnapshot();
         long expectedHits = (long)plans * REPEATS_PER_PLAN;
         require(snapshot.misses() == plans,
             "heavy generation count must equal unique plans");
@@ -57,6 +69,12 @@ public final class TreePerformanceSelfTest {
             "cache capacity exceeded");
         require(snapshot.hitRate() > 0.80,
             "repeat workload must achieve a high cache hit rate");
+        require(structure.trunkSegments() > 0L,
+            "structure diagnostics lost trunk segments");
+        require(structure.liveBranchSegments() > 0L,
+            "structure diagnostics lost live branches");
+        require(structure.totalSegments() >= structure.trunkSegments(),
+            "structure total is inconsistent");
 
         double coldMicros = coldNanos / 1_000.0 / plans;
         double hitMicros = hitNanos / 1_000.0 / expectedHits;
@@ -66,8 +84,20 @@ public final class TreePerformanceSelfTest {
             + " misses=" + snapshot.misses()
             + " hits=" + snapshot.hits()
             + " hitRate=" + snapshot.hitRate());
+        System.out.println("segments=" + structure.totalSegments()
+            + " trunk=" + structure.trunkSegments()
+            + " roots=" + structure.rootSegments()
+            + " live=" + structure.liveBranchSegments()
+            + " dead=" + structure.deadBranchSegments()
+            + " leaders=" + structure.secondaryLeaderSegments());
         System.out.println("diagnostic_avg_cold_us=" + coldMicros
             + " diagnostic_avg_hit_us=" + hitMicros);
+
+        TreeModelCache.clear();
+        require(TreeModelCache.snapshot().requests() == 0L,
+            "cache clear must reset request statistics");
+        require(TreeModelCache.structureSnapshot().totalSegments() == 0L,
+            "cache clear must reset structural role statistics");
     }
 
     private static ProceduralTreePlan plan(
