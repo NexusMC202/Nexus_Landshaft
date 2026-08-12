@@ -30,6 +30,8 @@ public final class TreeDebugCommand {
     private static int counters(CommandSourceStack source) {
         TreeRuntimeTelemetry.Snapshot runtime = TreeRuntimeTelemetry.snapshot();
         TreeModelCache.Snapshot cache = TreeModelCache.snapshot();
+        TreeModelCache.StructureSnapshot structure =
+            TreeModelCache.structureSnapshot();
         send(source, "Nexus procedural tree counters");
         send(source, String.format(
             Locale.ROOT,
@@ -57,6 +59,17 @@ public final class TreeDebugCommand {
             cache.size(),
             cache.capacity(),
             cache.requests()
+        ));
+        send(source, String.format(
+            Locale.ROOT,
+            "generated_segments=%d trunk=%d roots=%d live_branches=%d "
+                + "dead_branches=%d secondary_leaders=%d",
+            structure.totalSegments(),
+            structure.trunkSegments(),
+            structure.rootSegments(),
+            structure.liveBranchSegments(),
+            structure.deadBranchSegments(),
+            structure.secondaryLeaderSegments()
         ));
         return 1;
     }
