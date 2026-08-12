@@ -217,6 +217,14 @@ tasks.register('crownBiasMetricsTest', JavaExec) {
     mainClass = 'dev.nexusmc.landscape.worldgen.v2.tree.CrownBiasMetricsSelfTest'
 }
 
+tasks.register('treeRuntimeOutcomeTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks tree cache lookup classification and quota fallback semantics.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.tree.TreeRuntimeOutcomeSelfTest'
+}
+
 tasks.named('check') {
     dependsOn regionalFieldTest, stage6SurfaceTest, stage6VegetationTest,
         stage6CommandTest, boundedCacheTest, stage6ProfilerTest,
@@ -224,5 +232,5 @@ tasks.named('check') {
         surfaceProfileInvariantTest, climateRouterRangeTest,
         riverWidthPolicyTest, treeModelFoundationTest, anatomicalPlanningTest,
         coniferSpeciesEnvelopeTest, treePerformanceTest, segmentRoleTest,
-        windDeformationTest, crownBiasMetricsTest
+        windDeformationTest, crownBiasMetricsTest, treeRuntimeOutcomeTest
 }
