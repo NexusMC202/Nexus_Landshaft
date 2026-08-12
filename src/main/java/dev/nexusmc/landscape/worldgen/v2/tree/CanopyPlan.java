@@ -45,9 +45,11 @@ public record CanopyPlan(List<Cluster> clusters) {
         double relativeHeight = crownTop <= 0.0
             ? 1.0
             : clamp(segment.endY() / crownTop, 0.0, 1.0);
-        double density = anatomy.species().foliageDensityMultiplier();
-        int horizontal = 1 + (unit(hash) < 0.68 * density ? 1 : 0);
-        int verticalDown = 1 + (relativeHeight < 0.72 ? 1 : 0);
+        double windDensity = windDensityMultiplier(segment, anatomy.environment());
+        double density = anatomy.species().foliageDensityMultiplier() * windDensity;
+        double horizontalChance = clamp(0.68 * density, 0.30, 0.94);
+        int horizontal = 1 + (unit(hash) < horizontalChance ? 1 : 0);
+        int verticalDown = 1 + (relativeHeight < 0.72 && windDensity > 0.74 ? 1 : 0);
         int verticalUp = relativeHeight > 0.80 ? 2 : 1;
         return new Cluster(
             segment.id(),
@@ -75,14 +77,22 @@ public record CanopyPlan(List<Cluster> clusters) {
             return null;
         }
         long hash = foliageHash(anatomy.seed(), segment.id(), anatomy.species());
-        double acceptance = 0.52
+        double windDensity = windDensityMultiplier(segment, anatomy.environment());
+        double acceptance = (0.52
             + (relativeHeight - 0.54) * 0.82
-            * anatomy.species().upperCrownMultiplier();
+            * anatomy.species().upperCrownMultiplier())
+            * clamp(windDensity, 0.72, 1.18);
+        acceptance = clamp(acceptance, 0.28, 0.98);
         if (relativeHeight < 0.74 && unit(hash) > acceptance) {
             return null;
         }
+        if (windDensity < 0.80
+            && relativeHeight < 0.86
+            && unit(mix(hash ^ 0x57494E4443414E4FL)) > windDensity) {
+            return null;
+        }
         int horizontal = relativeHeight > 0.76 ? 2 : 1;
-        if (unit(mix(hash)) > 0.72) {
+        if (unit(mix(hash)) > 0.72 / clamp(windDensity, 0.72, 1.18)) {
             horizontal++;
         }
         horizontal = Math.min(horizontal, 3);
@@ -96,8 +106,19 @@ public record CanopyPlan(List<Cluster> clusters) {
             horizontal,
             vertical,
             vertical,
-            anatomy.species().foliageDensityMultiplier(),
+            anatomy.species().foliageDensityMultiplier() * windDensity,
             hash
+        );
+    }
+
+    private static double windDensityMultiplier(
+        BranchGraph.Segment segment,
+        TreeEnvironment environment
+    ) {
+        return WindAsymmetryPolicy.canopyDensityMultiplier(
+            environment,
+            segment.endX() - segment.startX(),
+            segment.endZ() - segment.startZ()
         );
     }
 
