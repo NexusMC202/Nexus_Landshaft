@@ -44,17 +44,11 @@ public final class TreeModelCache {
         }
         MISSES.increment();
 
-        AnatomyPlan anatomy = AnatomyPlan.resolve(plan);
-        BranchGraph baseGraph = SpeciesConiferBranchGenerator.generate(anatomy);
-        WindDeformationPlan wind = WindDeformationPlan.resolve(anatomy);
-        BranchGraph graph = wind.apply(baseGraph, anatomy);
+        TreeGenerationPipeline.GeneratedTree generatedTree =
+            TreeGenerationPipeline.generate(plan);
+        BranchGraph graph = generatedTree.graph();
+        VoxelTreeModel generated = generatedTree.model();
         recordRoles(graph);
-        CanopyPlan canopy = anatomy.canopy(graph);
-        VoxelTreeModel generated = TreeVoxelizer.voxelize(
-            graph,
-            plan.quality(),
-            canopy
-        );
         recordCrown(CrownBiasMetrics.measure(generated, plan.environment()));
         MODELS.put(key, generated);
         VoxelTreeModel admitted = MODELS.get(key);
