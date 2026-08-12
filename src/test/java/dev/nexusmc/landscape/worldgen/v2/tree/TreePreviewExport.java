@@ -15,9 +15,9 @@ import java.util.Map;
  * resources.
  */
 public final class TreePreviewExport {
-    private static final int FORMAT_VERSION = 3;
+    private static final int FORMAT_VERSION = 4;
     private static final String GENERATOR_ID =
-        "nexus_landscape:conifer_species_anatomical_v3";
+        "nexus_landscape:conifer_species_anatomical_v4";
     private static final Gson GSON = new GsonBuilder()
         .setPrettyPrinting()
         .create();
@@ -58,27 +58,23 @@ public final class TreePreviewExport {
                             ^ environmentIndex * 0x9E3779B97F4A7C15L
                     );
                     TreeEnvironment environment = entry.getValue();
-                    TreeLifeHistory history = TreeLifeHistory.generate(
-                        seed, quality, environment
+                    ProceduralTreePlan procedural = new ProceduralTreePlan(
+                        seed,
+                        species,
+                        quality,
+                        environment,
+                        quality == TreeQualityTier.HERO
                     );
-                    TrunkPlan trunk = TrunkPlan.resolve(
-                        seed, quality, environment, history
-                    );
-                    RootPlan roots = RootPlan.resolve(
-                        seed, quality, environment, history, trunk
-                    );
-                    BranchFamilyPlan branchFamilies = BranchFamilyPlan.resolve(
-                        seed, quality, environment, history, trunk
-                    );
-                    BranchGraph graph = SpeciesConiferBranchGenerator.generate(
-                        seed, species, quality, environment, history
-                    );
+                    AnatomyPlan anatomy = AnatomyPlan.resolve(procedural);
+                    BranchGraph graph = SpeciesConiferBranchGenerator.generate(anatomy);
+                    CanopyPlan canopy = anatomy.canopy(graph);
                     VoxelTreeModel model = TreeVoxelizer.voxelize(
-                        graph, quality, seed, species
+                        graph, canopy, quality
                     );
                     TreePlacementEnvelope envelope = TreePlacementEnvelope.estimate(
                         species, quality, environment, quality == TreeQualityTier.HERO
                     );
+                    RoleCounts roles = roleCounts(graph);
 
                     Preview preview = new Preview(
                         FORMAT_VERSION,
@@ -88,15 +84,16 @@ public final class TreePreviewExport {
                         seed,
                         quality,
                         environment,
-                        history,
-                        trunk,
-                        roots,
-                        branchFamilies,
+                        anatomy.history(),
+                        anatomy.trunk(),
+                        anatomy.roots(),
+                        anatomy.branchFamilies(),
+                        canopy,
                         envelope,
                         graph.fingerprint(),
                         model.fingerprint(),
                         graph.segments().size(),
-                        deadBranches(graph),
+                        roles,
                         model.wood().size(),
                         undergroundWood(model),
                         model.leaves().size(),
@@ -133,10 +130,22 @@ public final class TreePreviewExport {
         );
     }
 
-    private static int deadBranches(BranchGraph graph) {
-        return (int)graph.segments().stream()
-            .filter(BranchGraph.Segment::dead)
-            .count();
+    private static RoleCounts roleCounts(BranchGraph graph) {
+        int trunk = 0;
+        int roots = 0;
+        int live = 0;
+        int dead = 0;
+        int leaders = 0;
+        for (BranchGraph.Segment segment : graph.segments()) {
+            switch (segment.role()) {
+                case TRUNK -> trunk++;
+                case ROOT -> roots++;
+                case LIVE_BRANCH -> live++;
+                case DEAD_BRANCH -> dead++;
+                case SECONDARY_LEADER -> leaders++;
+            }
+        }
+        return new RoleCounts(trunk, roots, live, dead, leaders);
     }
 
     private static int undergroundWood(VoxelTreeModel model) {
@@ -179,14 +188,15 @@ public final class TreePreviewExport {
         TreeQualityTier quality,
         TreeEnvironment environment,
         TreeLifeHistory lifeHistory,
-        TrunkPlan baseTrunkPlan,
+        TrunkPlan trunkPlan,
         RootPlan rootPlan,
-        BranchFamilyPlan baseBranchFamilyPlan,
+        BranchFamilyPlan branchFamilyPlan,
+        CanopyPlan canopyPlan,
         TreePlacementEnvelope placementEnvelope,
         long branchFingerprint,
         long voxelFingerprint,
         int branchSegments,
-        int deadBranchSegments,
+        RoleCounts segmentRoles,
         int woodBlocks,
         int undergroundWoodBlocks,
         int leafBlocks,
@@ -194,6 +204,15 @@ public final class TreePreviewExport {
         List<BranchGraph.Segment> branches,
         List<VoxelTreeModel.Voxel> wood,
         List<VoxelTreeModel.Voxel> leaves
+    ) {
+    }
+
+    private record RoleCounts(
+        int trunkSegments,
+        int rootSegments,
+        int liveBranchSegments,
+        int deadBranchSegments,
+        int secondaryLeaderSegments
     ) {
     }
 
