@@ -18,6 +18,7 @@ public final class AnatomicalPlanningSelfTest {
         verifyRootVoxelsReachTheModel();
         verifyPlanningIsDeterministic();
         verifyUnifiedAnatomyPlan();
+        verifyCanopyPlanning();
         System.out.println("AnatomicalPlanningSelfTest: PASS");
     }
 
@@ -243,6 +244,63 @@ public final class AnatomicalPlanningSelfTest {
         require(direct.segments().size()
                 <= TreeQualityTier.HERO.budget().maxBranchSegments(),
             "unified anatomy graph exceeded segment budget");
+    }
+
+    private static void verifyCanopyPlanning() {
+        long seed = 0x43414E4F5059504CL;
+        TreeEnvironment environment = new TreeEnvironment(
+            0.20, 0.66, 0.42, 0.06,
+            -0.38, 0.16, 0.68, -0.12, 98
+        );
+        AnatomyPlan spruce = AnatomyPlan.resolve(
+            seed, ConiferSpeciesProfile.SPRUCE, TreeQualityTier.MID, environment
+        );
+        AnatomyPlan pine = AnatomyPlan.resolve(
+            seed, ConiferSpeciesProfile.PINE, TreeQualityTier.MID, environment
+        );
+        BranchGraph spruceGraph = ConiferBranchGenerator.generate(spruce);
+        BranchGraph pineGraph = ConiferBranchGenerator.generate(pine);
+        CanopyPlan spruceCanopy = spruce.canopy(spruceGraph);
+        CanopyPlan spruceAgain = spruce.canopy(spruceGraph);
+        CanopyPlan pineCanopy = pine.canopy(pineGraph);
+
+        require(spruceCanopy.equals(spruceAgain),
+            "canopy planning is not deterministic");
+        require(!spruceCanopy.clusters().isEmpty(),
+            "spruce canopy produced no clusters");
+        require(!pineCanopy.clusters().isEmpty(),
+            "pine canopy produced no clusters");
+        require(spruceCanopy.clusters().stream().allMatch(cluster ->
+                cluster.kind() == CanopyPlan.ClusterKind.SPRUCE_MASS),
+            "spruce canopy contains non-spruce clusters");
+        require(pineCanopy.clusters().stream().allMatch(cluster ->
+                cluster.kind() == CanopyPlan.ClusterKind.PINE_CLUSTER),
+            "pine canopy contains non-pine clusters");
+
+        int spruceLow = lowClusterCount(spruceCanopy, spruce.trunk().height());
+        int pineLow = lowClusterCount(pineCanopy, pine.trunk().height());
+        require(spruceLow > pineLow,
+            "spruce must retain more low canopy clusters than pine");
+
+        VoxelTreeModel first = TreeVoxelizer.voxelize(
+            spruceGraph, TreeQualityTier.MID, spruceCanopy
+        );
+        VoxelTreeModel second = TreeVoxelizer.voxelize(
+            spruceGraph, TreeQualityTier.MID, spruceCanopy
+        );
+        require(first.fingerprint() == second.fingerprint(),
+            "voxelization from a canopy plan is not deterministic");
+    }
+
+    private static int lowClusterCount(CanopyPlan canopy, int trunkHeight) {
+        int count = 0;
+        double cutoff = trunkHeight * 0.56;
+        for (CanopyPlan.Cluster cluster : canopy.clusters()) {
+            if (cluster.centerY() < cutoff) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private static boolean connected(java.util.List<VoxelTreeModel.Voxel> voxels) {
