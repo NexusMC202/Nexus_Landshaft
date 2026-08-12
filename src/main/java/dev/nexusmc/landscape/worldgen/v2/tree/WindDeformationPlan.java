@@ -33,24 +33,26 @@ public record WindDeformationPlan(
         }
         double directionX = environment.windX() / wind;
         double directionZ = environment.windZ() / wind;
-        double exposure = clamp(
-            0.46 + environment.openSpaceStrength() * 0.34
-                + environment.slope() * 0.20,
-            0.40,
-            1.0
-        );
-        double strength = clamp(wind * exposure, 0.0, 1.0);
-        double tierShift = switch (anatomy.quality()) {
-            case BASIC -> 0.85;
-            case MID -> 1.45;
-            case HERO -> 2.20;
-        };
+        double strength = responseStrength(environment);
         return new WindDeformationPlan(
             directionX,
             directionZ,
             strength,
-            tierShift * strength
+            tierShift(anatomy.quality()) * strength
         );
+    }
+
+    public static int conservativeExtraRadius(
+        TreeQualityTier quality,
+        TreeEnvironment environment
+    ) {
+        if (quality == null || environment == null) {
+            throw new IllegalArgumentException("wind envelope inputs are required");
+        }
+        if (environment.windStrength() < 0.08) {
+            return 0;
+        }
+        return (int)Math.ceil(tierShift(quality) * responseStrength(environment));
     }
 
     public BranchGraph apply(BranchGraph graph, AnatomyPlan anatomy) {
@@ -113,6 +115,25 @@ public record WindDeformationPlan(
 
     public int conservativeExtraRadius() {
         return (int)Math.ceil(maxLateralShift);
+    }
+
+    private static double responseStrength(TreeEnvironment environment) {
+        double wind = environment.windStrength();
+        double exposure = clamp(
+            0.46 + environment.openSpaceStrength() * 0.34
+                + environment.slope() * 0.20,
+            0.40,
+            1.0
+        );
+        return clamp(wind * exposure, 0.0, 1.0);
+    }
+
+    private static double tierShift(TreeQualityTier quality) {
+        return switch (quality) {
+            case BASIC -> 0.85;
+            case MID -> 1.45;
+            case HERO -> 2.20;
+        };
     }
 
     private static double clamp(double value, double min, double max) {
