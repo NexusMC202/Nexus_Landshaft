@@ -1,6 +1,6 @@
 package dev.nexusmc.landscape.worldgen.v2.tree;
 
-/** Verifies deterministic exposed-tree deformation and conservative bounds. */
+/** Verifies deterministic exposed-tree deformation and directional asymmetry. */
 public final class WindDeformationSelfTest {
     private WindDeformationSelfTest() {
     }
@@ -8,6 +8,7 @@ public final class WindDeformationSelfTest {
     public static void main(String[] args) {
         verifyWindBendsTreeWithoutChangingTopology();
         verifyCalmAndWindySeparation();
+        verifyDirectionalAsymmetryPolicy();
         verifyEnvelopeIncludesWindReserve();
         System.out.println("WindDeformationSelfTest: PASS");
     }
@@ -92,6 +93,48 @@ public final class WindDeformationSelfTest {
             "calm tree received an unexpectedly large top shift");
         require(windyShift > calmShift + 0.75,
             "windy tree is not visually separated from calm tree");
+    }
+
+    private static void verifyDirectionalAsymmetryPolicy() {
+        TreeEnvironment exposed = new TreeEnvironment(
+            0.66, 0.40, 0.16, 0.02,
+            0.94, 0.0, 0.84, 0.05, 132
+        );
+        double leewardBranch = WindAsymmetryPolicy.branchLengthMultiplier(
+            exposed, 1.0, 0.0
+        );
+        double windwardBranch = WindAsymmetryPolicy.branchLengthMultiplier(
+            exposed, -1.0, 0.0
+        );
+        double leewardCanopy = WindAsymmetryPolicy.canopyDensityMultiplier(
+            exposed, 1.0, 0.0
+        );
+        double windwardCanopy = WindAsymmetryPolicy.canopyDensityMultiplier(
+            exposed, -1.0, 0.0
+        );
+        double leewardDamage = WindAsymmetryPolicy.damageProbabilityBonus(
+            exposed, 1.0, 0.0
+        );
+        double windwardDamage = WindAsymmetryPolicy.damageProbabilityBonus(
+            exposed, -1.0, 0.0
+        );
+
+        require(leewardBranch > 1.12,
+            "leeward branch growth is not visibly favored");
+        require(windwardBranch < 0.88,
+            "windward branch growth is not sufficiently suppressed");
+        require(leewardBranch > windwardBranch + 0.25,
+            "branch asymmetry is too weak");
+        require(leewardCanopy > 1.08,
+            "leeward canopy density is not favored");
+        require(windwardCanopy < 0.90,
+            "windward canopy density is not sufficiently reduced");
+        require(leewardCanopy > windwardCanopy + 0.18,
+            "canopy asymmetry is too weak");
+        require(leewardDamage == 0.0,
+            "leeward branches must not receive windward damage bonus");
+        require(windwardDamage > 0.08,
+            "windward branches need a meaningful damage bonus");
     }
 
     private static double topShift(long seed, TreeEnvironment environment) {
