@@ -15,9 +15,9 @@ import java.util.Map;
  * resources.
  */
 public final class TreePreviewExport {
-    private static final int FORMAT_VERSION = 4;
+    private static final int FORMAT_VERSION = 5;
     private static final String GENERATOR_ID =
-        "nexus_landscape:conifer_species_anatomical_v4";
+        "nexus_landscape:conifer_species_wind_v5";
     private static final Gson GSON = new GsonBuilder()
         .setPrettyPrinting()
         .create();
@@ -66,7 +66,9 @@ public final class TreePreviewExport {
                         quality == TreeQualityTier.HERO
                     );
                     AnatomyPlan anatomy = AnatomyPlan.resolve(procedural);
-                    BranchGraph graph = SpeciesConiferBranchGenerator.generate(anatomy);
+                    BranchGraph baseGraph = SpeciesConiferBranchGenerator.generate(anatomy);
+                    WindDeformationPlan wind = WindDeformationPlan.resolve(anatomy);
+                    BranchGraph graph = wind.apply(baseGraph, anatomy);
                     CanopyPlan canopy = anatomy.canopy(graph);
                     VoxelTreeModel model = TreeVoxelizer.voxelize(
                         graph, quality, canopy
@@ -75,6 +77,7 @@ public final class TreePreviewExport {
                         species, quality, environment, quality == TreeQualityTier.HERO
                     );
                     RoleCounts roles = roleCounts(graph);
+                    TopShift topShift = topShift(baseGraph, graph);
 
                     Preview preview = new Preview(
                         FORMAT_VERSION,
@@ -88,10 +91,13 @@ public final class TreePreviewExport {
                         anatomy.trunk(),
                         anatomy.roots(),
                         anatomy.branchFamilies(),
+                        wind,
                         canopy,
                         envelope,
+                        baseGraph.fingerprint(),
                         graph.fingerprint(),
                         model.fingerprint(),
+                        topShift,
                         graph.segments().size(),
                         roles,
                         model.wood().size(),
@@ -148,6 +154,27 @@ public final class TreePreviewExport {
         return new RoleCounts(trunk, roots, live, dead, leaders);
     }
 
+    private static TopShift topShift(BranchGraph before, BranchGraph after) {
+        BranchGraph.Segment baseTop = highestSegment(before);
+        BranchGraph.Segment movedTop = after.segments().stream()
+            .filter(segment -> segment.id() == baseTop.id())
+            .findFirst()
+            .orElseThrow();
+        double dx = movedTop.endX() - baseTop.endX();
+        double dz = movedTop.endZ() - baseTop.endZ();
+        return new TopShift(dx, dz, Math.hypot(dx, dz));
+    }
+
+    private static BranchGraph.Segment highestSegment(BranchGraph graph) {
+        BranchGraph.Segment highest = graph.segments().getFirst();
+        for (BranchGraph.Segment segment : graph.segments()) {
+            if (segment.endY() > highest.endY()) {
+                highest = segment;
+            }
+        }
+        return highest;
+    }
+
     private static int undergroundWood(VoxelTreeModel model) {
         return (int)model.wood().stream()
             .filter(voxel -> voxel.y() < 0)
@@ -191,10 +218,13 @@ public final class TreePreviewExport {
         TrunkPlan trunkPlan,
         RootPlan rootPlan,
         BranchFamilyPlan branchFamilyPlan,
+        WindDeformationPlan windDeformation,
         CanopyPlan canopyPlan,
         TreePlacementEnvelope placementEnvelope,
-        long branchFingerprint,
+        long baseBranchFingerprint,
+        long deformedBranchFingerprint,
         long voxelFingerprint,
+        TopShift topShift,
         int branchSegments,
         RoleCounts segmentRoles,
         int woodBlocks,
@@ -214,6 +244,9 @@ public final class TreePreviewExport {
         int deadBranchSegments,
         int secondaryLeaderSegments
     ) {
+    }
+
+    private record TopShift(double x, double z, double distance) {
     }
 
     private record Bounds(
