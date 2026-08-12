@@ -7,6 +7,7 @@ public final class WindDeformationSelfTest {
 
     public static void main(String[] args) {
         verifyWindBendsTreeWithoutChangingTopology();
+        verifyCalmAndWindySeparation();
         verifyEnvelopeIncludesWindReserve();
         System.out.println("WindDeformationSelfTest: PASS");
     }
@@ -72,6 +73,45 @@ public final class WindDeformationSelfTest {
             "wind-deformed wood exceeded budget");
         require(model.leaves().size() <= TreeQualityTier.HERO.budget().maxLeafBlocks(),
             "wind-deformed canopy exceeded budget");
+    }
+
+    private static void verifyCalmAndWindySeparation() {
+        long seed = 0x43414C4D57494E44L;
+        TreeEnvironment calm = new TreeEnvironment(
+            0.18, 0.60, 0.42, 0.04,
+            0.02, -0.01, 0.28, 0.06, 96
+        );
+        TreeEnvironment windy = new TreeEnvironment(
+            0.62, 0.38, 0.22, 0.04,
+            -0.92, 0.24, 0.68, -0.12, 138
+        );
+
+        double calmShift = topShift(seed, calm);
+        double windyShift = topShift(seed, windy);
+        require(calmShift < 0.25,
+            "calm tree received an unexpectedly large top shift");
+        require(windyShift > calmShift + 0.75,
+            "windy tree is not visually separated from calm tree");
+    }
+
+    private static double topShift(long seed, TreeEnvironment environment) {
+        ProceduralTreePlan procedural = new ProceduralTreePlan(
+            seed,
+            ConiferSpeciesProfile.PINE,
+            TreeQualityTier.HERO,
+            environment,
+            true
+        );
+        AnatomyPlan anatomy = AnatomyPlan.resolve(procedural);
+        BranchGraph base = SpeciesConiferBranchGenerator.generate(anatomy);
+        WindDeformationPlan wind = WindDeformationPlan.resolve(anatomy);
+        BranchGraph deformed = wind.apply(base, anatomy);
+        BranchGraph.Segment before = lastTrunk(base);
+        BranchGraph.Segment after = lastTrunk(deformed);
+        return Math.hypot(
+            after.endX() - before.endX(),
+            after.endZ() - before.endZ()
+        );
     }
 
     private static void verifyEnvelopeIncludesWindReserve() {
