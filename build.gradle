@@ -225,6 +225,14 @@ tasks.register('treeRuntimeOutcomeTest', JavaExec) {
     mainClass = 'dev.nexusmc.landscape.worldgen.v2.tree.TreeRuntimeOutcomeSelfTest'
 }
 
+tasks.register('treeGenerationPipelineTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks unified deterministic tree generation and cache parity.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.tree.TreeGenerationPipelineSelfTest'
+}
+
 tasks.named('check') {
     dependsOn regionalFieldTest, stage6SurfaceTest, stage6VegetationTest,
         stage6CommandTest, boundedCacheTest, stage6ProfilerTest,
@@ -232,5 +240,6 @@ tasks.named('check') {
         surfaceProfileInvariantTest, climateRouterRangeTest,
         riverWidthPolicyTest, treeModelFoundationTest, anatomicalPlanningTest,
         coniferSpeciesEnvelopeTest, treePerformanceTest, segmentRoleTest,
-        windDeformationTest, crownBiasMetricsTest, treeRuntimeOutcomeTest
+        windDeformationTest, crownBiasMetricsTest, treeRuntimeOutcomeTest,
+        treeGenerationPipelineTest
 }
