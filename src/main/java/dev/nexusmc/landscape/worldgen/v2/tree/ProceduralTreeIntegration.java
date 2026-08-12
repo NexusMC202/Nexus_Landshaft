@@ -110,7 +110,7 @@ public final class ProceduralTreeIntegration {
             result,
             plan.quality(),
             plan.fingerprint(),
-            true,
+            placement.cacheLookupPerformed(),
             placement.cacheHit()
         ));
     }
