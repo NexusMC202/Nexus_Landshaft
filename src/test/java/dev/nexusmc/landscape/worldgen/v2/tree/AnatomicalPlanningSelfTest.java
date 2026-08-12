@@ -17,6 +17,7 @@ public final class AnatomicalPlanningSelfTest {
         verifyBranchFamiliesAreDistinct();
         verifyRootVoxelsReachTheModel();
         verifyPlanningIsDeterministic();
+        verifyUnifiedAnatomyPlan();
         System.out.println("AnatomicalPlanningSelfTest: PASS");
     }
 
@@ -204,6 +205,44 @@ public final class AnatomicalPlanningSelfTest {
         );
         require(firstBranches.equals(secondBranches),
             "branch-family planning is not deterministic");
+    }
+
+    private static void verifyUnifiedAnatomyPlan() {
+        long seed = 0x414E41544F4D5950L;
+        TreeEnvironment environment = new TreeEnvironment(
+            0.31, 0.61, 0.38, 0.05,
+            -0.58, 0.24, 0.70, -0.16, 107
+        );
+        ProceduralTreePlan procedural = new ProceduralTreePlan(
+            seed,
+            ConiferSpeciesProfile.PINE,
+            TreeQualityTier.HERO,
+            environment,
+            true
+        );
+        AnatomyPlan first = AnatomyPlan.resolve(procedural);
+        AnatomyPlan second = AnatomyPlan.resolve(procedural);
+        require(first.equals(second), "unified anatomy plan is not deterministic");
+        require(first.fingerprint() == second.fingerprint(),
+            "unified anatomy fingerprint is not deterministic");
+        require(first.species() == ConiferSpeciesProfile.PINE,
+            "unified anatomy lost the species profile");
+        require(first.trunk().height() <= TreeQualityTier.HERO.budget().maxHeight(),
+            "unified anatomy exceeded height budget");
+
+        BranchGraph direct = ConiferBranchGenerator.generate(first);
+        BranchGraph speciesEntry = SpeciesConiferBranchGenerator.generate(
+            seed,
+            ConiferSpeciesProfile.PINE,
+            TreeQualityTier.HERO,
+            environment,
+            first.history()
+        );
+        require(direct.fingerprint() == speciesEntry.fingerprint(),
+            "direct anatomy and species entry points diverged");
+        require(direct.segments().size()
+                <= TreeQualityTier.HERO.budget().maxBranchSegments(),
+            "unified anatomy graph exceeded segment budget");
     }
 
     private static boolean connected(java.util.List<VoxelTreeModel.Voxel> voxels) {
