@@ -178,6 +178,8 @@ public final class ConiferBranchGenerator {
                     + index * GOLDEN_ANGLE
                     + familyOrdinal * 0.43
                     + (TreeLifeHistory.unit(TreeLifeHistory.mix(state)) - 0.5) * 0.46;
+                double directionX = Math.cos(angle);
+                double directionZ = Math.sin(angle);
                 double bandPosition = normalizedBandPosition(family, vertical);
                 double familyShape = familyLengthShape(family.kind(), bandPosition);
                 double length = family.baseLength()
@@ -185,28 +187,33 @@ public final class ConiferBranchGenerator {
                     * (0.78 + TreeLifeHistory.unit(state) * 0.42)
                     * (0.80 + history.vigor() * 0.25);
 
-                double windProjection = environment.windX() * Math.cos(angle)
-                    + environment.windZ() * Math.sin(angle);
-                double openProjection = environment.openSpaceX() * Math.cos(angle)
-                    + environment.openSpaceZ() * Math.sin(angle);
-                length *= clamp(
-                    1.0 + windProjection * 0.22 + openProjection * 0.12,
-                    0.52,
-                    1.36
+                double openProjection = environment.openSpaceX() * directionX
+                    + environment.openSpaceZ() * directionZ;
+                length *= WindAsymmetryPolicy.branchLengthMultiplier(
+                    environment, directionX, directionZ
                 );
+                length *= clamp(1.0 + openProjection * 0.12, 0.84, 1.14);
 
                 double attachX = trunk.leanX() * vertical * vertical;
                 double attachY = trunk.height() * vertical;
                 double attachZ = trunk.leanZ() * vertical * vertical;
-                double radialX = Math.cos(angle) * length;
-                double radialZ = Math.sin(angle) * length;
+                double radialX = directionX * length;
+                double radialZ = directionZ * length;
                 double verticalOffset = length * family.upwardLift()
                     - length * family.droop() * (0.72 + vertical * 0.38);
 
+                double windDamageBonus = WindAsymmetryPolicy.damageProbabilityBonus(
+                    environment, directionX, directionZ
+                );
+                double deadProbability = clamp(
+                    family.deadProbability() + windDamageBonus,
+                    0.0,
+                    0.88
+                );
                 boolean dead = !family.foliageBearing()
                     || TreeLifeHistory.unit(
                         TreeLifeHistory.mix(state ^ 0x444541444252414EL)
-                    ) < family.deadProbability();
+                    ) < deadProbability;
                 SegmentRole role = dead
                     ? SegmentRole.DEAD_BRANCH
                     : SegmentRole.LIVE_BRANCH;
