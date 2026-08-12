@@ -37,7 +37,9 @@ public final class TreeModelCache {
         MISSES.increment();
 
         AnatomyPlan anatomy = AnatomyPlan.resolve(plan);
-        BranchGraph graph = SpeciesConiferBranchGenerator.generate(anatomy);
+        BranchGraph baseGraph = SpeciesConiferBranchGenerator.generate(anatomy);
+        WindDeformationPlan wind = WindDeformationPlan.resolve(anatomy);
+        BranchGraph graph = wind.apply(baseGraph, anatomy);
         recordRoles(graph);
         CanopyPlan canopy = anatomy.canopy(graph);
         VoxelTreeModel generated = TreeVoxelizer.voxelize(
