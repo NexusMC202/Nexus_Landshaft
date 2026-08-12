@@ -69,7 +69,7 @@ public final class TreePreviewExport {
                     BranchGraph graph = SpeciesConiferBranchGenerator.generate(anatomy);
                     CanopyPlan canopy = anatomy.canopy(graph);
                     VoxelTreeModel model = TreeVoxelizer.voxelize(
-                        graph, canopy, quality
+                        graph, quality, canopy
                     );
                     TreePlacementEnvelope envelope = TreePlacementEnvelope.estimate(
                         species, quality, environment, quality == TreeQualityTier.HERO
