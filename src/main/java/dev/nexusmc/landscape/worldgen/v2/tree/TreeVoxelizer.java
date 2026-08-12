@@ -48,6 +48,26 @@ public final class TreeVoxelizer {
                 "graph, quality and species are required"
             );
         }
+        TreeEnvironment neutral = new TreeEnvironment(
+            0.0, 0.65, 0.45, 0.0,
+            0.0, 0.0, 0.0, 0.0, 96
+        );
+        AnatomyPlan anatomy = AnatomyPlan.resolve(
+            seed, species, quality, neutral
+        );
+        return voxelize(graph, quality, anatomy.canopy(graph));
+    }
+
+    public static VoxelTreeModel voxelize(
+        BranchGraph graph,
+        TreeQualityTier quality,
+        CanopyPlan canopy
+    ) {
+        if (graph == null || quality == null || canopy == null) {
+            throw new IllegalArgumentException(
+                "graph, quality and canopy are required"
+            );
+        }
         TreeQualityTier.TreeBudget budget = quality.budget();
         LinkedHashSet<VoxelTreeModel.Voxel> wood = new LinkedHashSet<>();
         LinkedHashSet<VoxelTreeModel.Voxel> leaves = new LinkedHashSet<>();
@@ -55,21 +75,8 @@ public final class TreeVoxelizer {
         for (BranchGraph.Segment segment : graph.segments()) {
             rasterizeWood(segment, wood, budget);
         }
-
-        double crownTop = crownTop(graph);
-        for (BranchGraph.Segment segment : graph.segments()) {
-            if (segment.dead() || segment.endRadius() > 0.72) {
-                continue;
-            }
-            if (species == ConiferSpeciesProfile.PINE) {
-                growPineNeedleCluster(
-                    segment, crownTop, seed, leaves, wood, budget, species
-                );
-            } else {
-                growSpruceNeedleMass(
-                    segment, crownTop, seed, leaves, wood, budget, species
-                );
-            }
+        for (CanopyPlan.Cluster cluster : canopy.clusters()) {
+            growCluster(cluster, leaves, wood, budget);
         }
 
         return new VoxelTreeModel(
@@ -121,48 +128,26 @@ public final class TreeVoxelizer {
         }
     }
 
-    private static void growSpruceNeedleMass(
-        BranchGraph.Segment segment,
-        double crownTop,
-        long seed,
+    private static void growCluster(
+        CanopyPlan.Cluster cluster,
         Set<VoxelTreeModel.Voxel> leaves,
         Set<VoxelTreeModel.Voxel> wood,
-        TreeQualityTier.TreeBudget budget,
-        ConiferSpeciesProfile species
+        TreeQualityTier.TreeBudget budget
     ) {
-        long hash = foliageHash(seed, segment.id(), species);
-        double relativeHeight = crownTop <= 0.0
-            ? 1.0
-            : clamp(segment.endY() / crownTop, 0.0, 1.0);
-        int centerX = (int)Math.round(segment.endX());
-        int centerY = (int)Math.round(segment.endY() - (1.0 - relativeHeight) * 0.45);
-        int centerZ = (int)Math.round(segment.endZ());
-
-        double density = species.foliageDensityMultiplier();
-        int horizontal = 1 + (unit(hash) < 0.68 * density ? 1 : 0);
-        int verticalDown = 1 + (relativeHeight < 0.72 ? 1 : 0);
-        int verticalUp = relativeHeight > 0.80 ? 2 : 1;
+        int horizontal = cluster.horizontalRadius();
+        int verticalDown = cluster.verticalDown();
+        int verticalUp = cluster.verticalUp();
 
         for (int dx = -horizontal; dx <= horizontal; dx++) {
             for (int dy = -verticalDown; dy <= verticalUp; dy++) {
                 for (int dz = -horizontal; dz <= horizontal; dz++) {
-                    double horizontalShape =
-                        (dx * dx + dz * dz) / (double)(horizontal * horizontal);
-                    double verticalScale = dy < 0 ? verticalDown : verticalUp;
-                    double verticalShape = (dy * dy) / (verticalScale * verticalScale);
-                    double shape = horizontalShape + verticalShape;
-                    if (shape > 1.22) {
-                        continue;
-                    }
-                    long local = localHash(hash, dx, dy, dz);
-                    double edgeSkip = 0.22 / density;
-                    if (shape > 0.58 && unit(local) < edgeSkip) {
+                    if (!acceptClusterVoxel(cluster, dx, dy, dz)) {
                         continue;
                     }
                     addLeaf(
-                        centerX + dx,
-                        centerY + dy,
-                        centerZ + dz,
+                        cluster.centerX() + dx,
+                        cluster.centerY() + dy,
+                        cluster.centerZ() + dz,
                         leaves,
                         wood,
                         budget
@@ -172,68 +157,37 @@ public final class TreeVoxelizer {
         }
     }
 
-    private static void growPineNeedleCluster(
-        BranchGraph.Segment segment,
-        double crownTop,
-        long seed,
-        Set<VoxelTreeModel.Voxel> leaves,
-        Set<VoxelTreeModel.Voxel> wood,
-        TreeQualityTier.TreeBudget budget,
-        ConiferSpeciesProfile species
+    private static boolean acceptClusterVoxel(
+        CanopyPlan.Cluster cluster,
+        int dx,
+        int dy,
+        int dz
     ) {
-        double relativeHeight = crownTop <= 0.0
-            ? 1.0
-            : clamp(segment.endY() / crownTop, 0.0, 1.0);
-        if (relativeHeight < 0.54) {
-            return;
-        }
+        double horizontalShape =
+            (dx * dx + dz * dz)
+                / (double)(cluster.horizontalRadius() * cluster.horizontalRadius());
+        double verticalScale = dy < 0
+            ? cluster.verticalDown()
+            : cluster.verticalUp();
+        double verticalShape = (dy * dy) / (verticalScale * verticalScale);
+        double shape = horizontalShape + verticalShape;
+        long local = CanopyPlan.localHash(cluster.densitySeed(), dx, dy, dz);
 
-        long hash = foliageHash(seed, segment.id(), species);
-        double acceptance = 0.52
-            + (relativeHeight - 0.54) * 0.82
-            * species.upperCrownMultiplier();
-        if (relativeHeight < 0.74 && unit(hash) > acceptance) {
-            return;
-        }
-
-        int centerX = (int)Math.round(segment.endX());
-        int centerY = (int)Math.round(segment.endY());
-        int centerZ = (int)Math.round(segment.endZ());
-        int horizontal = relativeHeight > 0.76 ? 2 : 1;
-        if (unit(mix(hash)) > 0.72) {
-            horizontal++;
-        }
-        horizontal = Math.min(horizontal, 3);
-        int vertical = relativeHeight > 0.84 ? 2 : 1;
-        double density = species.foliageDensityMultiplier();
-
-        for (int dx = -horizontal; dx <= horizontal; dx++) {
-            for (int dy = -vertical; dy <= vertical; dy++) {
-                for (int dz = -horizontal; dz <= horizontal; dz++) {
-                    double shape =
-                        (dx * dx + dz * dz) / (double)(horizontal * horizontal)
-                            + (dy * dy) / (double)(vertical * vertical);
-                    if (shape > 1.10) {
-                        continue;
-                    }
-                    long local = localHash(hash, dx, dy, dz);
-                    double skip = shape > 0.48
-                        ? clamp(0.42 / density, 0.22, 0.62)
-                        : clamp(0.16 / density, 0.08, 0.30);
-                    if (unit(local) < skip) {
-                        continue;
-                    }
-                    addLeaf(
-                        centerX + dx,
-                        centerY + dy,
-                        centerZ + dz,
-                        leaves,
-                        wood,
-                        budget
-                    );
-                }
+        if (cluster.kind() == CanopyPlan.ClusterKind.SPRUCE_MASS) {
+            if (shape > 1.22) {
+                return false;
             }
+            double edgeSkip = 0.22 / cluster.density();
+            return shape <= 0.58 || CanopyPlan.unit(local) >= edgeSkip;
         }
+
+        if (shape > 1.10) {
+            return false;
+        }
+        double skip = shape > 0.48
+            ? clamp(0.42 / cluster.density(), 0.22, 0.62)
+            : clamp(0.16 / cluster.density(), 0.08, 0.30);
+        return CanopyPlan.unit(local) >= skip;
     }
 
     private static void addLeaf(
@@ -248,33 +202,6 @@ public final class TreeVoxelizer {
         if (voxel != null && !wood.contains(voxel)) {
             leaves.add(voxel);
         }
-    }
-
-    private static double crownTop(BranchGraph graph) {
-        double top = 0.0;
-        for (BranchGraph.Segment segment : graph.segments()) {
-            if (!segment.dead()) {
-                top = Math.max(top, Math.max(segment.startY(), segment.endY()));
-            }
-        }
-        return top;
-    }
-
-    private static long foliageHash(
-        long seed,
-        int segmentId,
-        ConiferSpeciesProfile species
-    ) {
-        return mix(seed
-            ^ ((long)segmentId * 0x9E3779B97F4A7C15L)
-            ^ ((long)species.ordinal() * 0xD1B54A32D192ED03L));
-    }
-
-    private static long localHash(long hash, int dx, int dy, int dz) {
-        return mix(hash
-            ^ ((long)dx * 0x632BE59BD9B4E019L)
-            ^ ((long)dy * 0x94D049BB133111EBL)
-            ^ ((long)dz * 0xC2B2AE3D27D4EB4FL));
     }
 
     private static void addBounded(
@@ -326,15 +253,5 @@ public final class TreeVoxelizer {
 
     private static double clamp(double value, double min, double max) {
         return Math.max(min, Math.min(max, value));
-    }
-
-    private static long mix(long value) {
-        value = (value ^ (value >>> 30)) * 0xBF58476D1CE4E5B9L;
-        value = (value ^ (value >>> 27)) * 0x94D049BB133111EBL;
-        return value ^ (value >>> 31);
-    }
-
-    private static double unit(long value) {
-        return (value >>> 11) * 0x1.0p-53;
     }
 }
