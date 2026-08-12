@@ -65,14 +65,14 @@ public final class TreePreviewExport {
                         environment,
                         quality == TreeQualityTier.HERO
                     );
-                    AnatomyPlan anatomy = AnatomyPlan.resolve(procedural);
-                    BranchGraph baseGraph = SpeciesConiferBranchGenerator.generate(anatomy);
-                    WindDeformationPlan wind = WindDeformationPlan.resolve(anatomy);
-                    BranchGraph graph = wind.apply(baseGraph, anatomy);
-                    CanopyPlan canopy = anatomy.canopy(graph);
-                    VoxelTreeModel model = TreeVoxelizer.voxelize(
-                        graph, quality, canopy
-                    );
+                    TreeGenerationPipeline.GeneratedTree generated =
+                        TreeGenerationPipeline.generate(procedural);
+                    AnatomyPlan anatomy = generated.anatomy();
+                    BranchGraph baseGraph = generated.baseGraph();
+                    WindDeformationPlan wind = generated.wind();
+                    BranchGraph graph = generated.graph();
+                    CanopyPlan canopy = generated.canopy();
+                    VoxelTreeModel model = generated.model();
                     CrownBiasMetrics crownBias = CrownBiasMetrics.measure(
                         model, environment
                     );
