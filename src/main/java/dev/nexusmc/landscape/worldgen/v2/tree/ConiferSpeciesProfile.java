@@ -5,10 +5,11 @@ import dev.nexusmc.landscape.worldgen.v2.vegetation.VegetationProfile;
 /**
  * Species-level modifiers applied before anatomical planning. The shared tree
  * engine remains identical, while spruce and pine resolve visibly different
- * silhouettes, crown positions and foliage density.
+ * silhouettes, crown positions, foliage density and explicit materials.
  */
 public enum ConiferSpeciesProfile {
     SPRUCE(
+        TreeMaterialProfile.SPRUCE,
         1.00,
         -0.06,
         0.92,
@@ -18,6 +19,7 @@ public enum ConiferSpeciesProfile {
         0.86
     ),
     PINE(
+        TreeMaterialProfile.SPRUCE,
         1.16,
         0.20,
         1.10,
@@ -27,6 +29,7 @@ public enum ConiferSpeciesProfile {
         1.18
     );
 
+    private final TreeMaterialProfile materialProfile;
     private final double heightMultiplier;
     private final double crownStartOffset;
     private final double branchLengthMultiplier;
@@ -36,6 +39,7 @@ public enum ConiferSpeciesProfile {
     private final double upperCrownMultiplier;
 
     ConiferSpeciesProfile(
+        TreeMaterialProfile materialProfile,
         double heightMultiplier,
         double crownStartOffset,
         double branchLengthMultiplier,
@@ -44,6 +48,10 @@ public enum ConiferSpeciesProfile {
         double trunkRadiusMultiplier,
         double upperCrownMultiplier
     ) {
+        if (materialProfile == null) {
+            throw new IllegalArgumentException("materialProfile is required");
+        }
+        this.materialProfile = materialProfile;
         this.heightMultiplier = positive(heightMultiplier, "heightMultiplier");
         this.crownStartOffset = finite(crownStartOffset, "crownStartOffset");
         this.branchLengthMultiplier = positive(
@@ -73,6 +81,10 @@ public enum ConiferSpeciesProfile {
             return PINE;
         }
         throw new IllegalArgumentException("unsupported conifer shape: " + shape);
+    }
+
+    public TreeMaterialProfile materialProfile() {
+        return materialProfile;
     }
 
     public double heightMultiplier() {
