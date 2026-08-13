@@ -2,6 +2,9 @@ package dev.nexusmc.landscape.worldgen.v2.tree;
 
 /** Verifies that all callers share one deterministic complete-tree pipeline. */
 public final class TreeGenerationPipelineSelfTest {
+    private static final VoxelTreeModel.Voxel ORIGIN_WOOD =
+        new VoxelTreeModel.Voxel(0, 0, 0);
+
     private TreeGenerationPipelineSelfTest() {
     }
 
@@ -66,12 +69,16 @@ public final class TreeGenerationPipelineSelfTest {
                         label + " species was lost in pipeline");
                     require(first.model().quality() == quality,
                         label + " quality was lost in pipeline");
+                    require(first.model().wood().contains(ORIGIN_WOOD),
+                        label + " generated model is missing trunk base voxel");
 
                     TreeModelCache.clear();
                     TreeModelCache.Lookup lookup = TreeModelCache.getOrCreateDetailed(plan);
                     require(!lookup.cacheHit(), label + " first cache lookup must miss");
                     require(lookup.model().fingerprint() == first.model().fingerprint(),
                         label + " cache miss did not use unified pipeline model");
+                    require(lookup.model().wood().contains(ORIGIN_WOOD),
+                        label + " cached model lost trunk base voxel");
                     TreeModelCache.Lookup hit = TreeModelCache.getOrCreateDetailed(plan);
                     require(hit.cacheHit(), label + " second cache lookup must hit");
                     require(hit.model().fingerprint() == first.model().fingerprint(),
