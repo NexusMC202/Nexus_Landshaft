@@ -207,10 +207,6 @@ public final class ProceduralTreeRuntime {
         if (level.getBlockState(ground).isAir()) {
             return new CheckResult(false, probes);
         }
-        probes++;
-        if (!level.getBlockState(base).getFluidState().isEmpty()) {
-            return new CheckResult(false, probes);
-        }
         for (VoxelTreeModel.Voxel voxel : model.wood()) {
             BlockPos position = absolute(base, voxel);
             probes++;
