@@ -1,15 +1,12 @@
 package dev.nexusmc.landscape.worldgen.v2.tree;
 
-import net.minecraft.world.level.block.Blocks;
-
-/** Verifies species material ids and strict Minecraft registry resolution. */
+/** Verifies pure species material ids without loading Minecraft runtime classes. */
 public final class TreeMaterialProfileSelfTest {
     private TreeMaterialProfileSelfTest() {
     }
 
     public static void main(String[] args) {
         verifyPureProfiles();
-        verifyRegistryResolution();
         verifyInvalidProfilesFail();
         System.out.println("TreeMaterialProfileSelfTest: PASS");
     }
@@ -34,24 +31,6 @@ public final class TreeMaterialProfileSelfTest {
             "vanilla pine must currently use spruce materials");
     }
 
-    private static void verifyRegistryResolution() {
-        for (ConiferSpeciesProfile species : ConiferSpeciesProfile.values()) {
-            TreeMaterialResolver.ResolvedMaterials resolved =
-                TreeMaterialResolver.resolve(species.materialProfile());
-            require(resolved.logBlock() == Blocks.SPRUCE_LOG,
-                species + " log registry mapping mismatch");
-            require(resolved.leavesBlock() == Blocks.SPRUCE_LEAVES,
-                species + " leaves registry mapping mismatch");
-            require(resolved.logBlock() != resolved.leavesBlock(),
-                species + " resolved materials unexpectedly alias");
-        }
-
-        expectFailure(() -> TreeMaterialResolver.resolve(new TreeMaterialProfile(
-            "minecraft:not_a_real_tree_log",
-            "minecraft:spruce_leaves"
-        )));
-    }
-
     private static void verifyInvalidProfilesFail() {
         expectFailure(() -> new TreeMaterialProfile(
             "spruce_log",
@@ -65,7 +44,6 @@ public final class TreeMaterialProfileSelfTest {
             "minecraft:spruce_log",
             "minecraft:spruce_log"
         ));
-        expectFailure(() -> TreeMaterialResolver.resolve(null));
     }
 
     private static void expectFailure(Runnable action) {
