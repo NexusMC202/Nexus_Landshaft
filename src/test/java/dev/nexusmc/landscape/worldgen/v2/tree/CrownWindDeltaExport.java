@@ -8,11 +8,14 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Exports paired calm-versus-windy crown morphology using identical seeds. */
+/** Exports and verifies paired calm-versus-windy crown morphology. */
 public final class CrownWindDeltaExport {
     private static final int FORMAT_VERSION = 1;
     private static final int SAMPLES = 8;
     private static final long ROOT_SEED = 0x4C454557415244L;
+    private static final double MIN_PROJECTION_DELTA = 0.50;
+    private static final double MIN_BALANCE_DELTA = 0.20;
+    private static final double MIN_LEEWARD_SHARE_DELTA = 0.10;
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     private CrownWindDeltaExport() {
@@ -29,48 +32,50 @@ public final class CrownWindDeltaExport {
         List<Entry> entries = new ArrayList<>();
         for (ConiferSpeciesProfile species : ConiferSpeciesProfile.values()) {
             for (TreeQualityTier quality : TreeQualityTier.values()) {
-                SampleSummary calmMeasuredAlongWind = measure(
-                    species, quality, calm, windy
+                SampleSummary calmSummary = measure(species, quality, calm, windy);
+                SampleSummary windySummary = measure(species, quality, windy, windy);
+                Delta delta = new Delta(
+                    windySummary.leafCount() - calmSummary.leafCount(),
+                    windySummary.meanWindProjection() - calmSummary.meanWindProjection(),
+                    windySummary.meanDirectionalBalance() - calmSummary.meanDirectionalBalance(),
+                    windySummary.leewardShare() - calmSummary.leewardShare()
                 );
-                SampleSummary windyMeasuredAlongWind = measure(
-                    species, quality, windy, windy
-                );
-                entries.add(new Entry(
-                    species,
-                    quality,
-                    calmMeasuredAlongWind,
-                    windyMeasuredAlongWind,
-                    new Delta(
-                        windyMeasuredAlongWind.leafCount()
-                            - calmMeasuredAlongWind.leafCount(),
-                        windyMeasuredAlongWind.meanWindProjection()
-                            - calmMeasuredAlongWind.meanWindProjection(),
-                        windyMeasuredAlongWind.meanDirectionalBalance()
-                            - calmMeasuredAlongWind.meanDirectionalBalance(),
-                        windyMeasuredAlongWind.leewardShare()
-                            - calmMeasuredAlongWind.leewardShare()
-                    )
-                ));
+                verifyDelta(species, quality, delta);
+                entries.add(new Entry(species, quality, calmSummary, windySummary, delta));
             }
         }
 
-        Export export = new Export(
-            FORMAT_VERSION,
-            "nexus_landscape:crown_wind_delta_v1",
-            ROOT_SEED,
-            SAMPLES,
-            calm,
-            windy,
-            List.copyOf(entries)
-        );
         Files.writeString(
             output.resolve("crown-wind-delta.json"),
-            GSON.toJson(export)
+            GSON.toJson(new Export(
+                FORMAT_VERSION,
+                "nexus_landscape:crown_wind_delta_v1",
+                ROOT_SEED,
+                SAMPLES,
+                calm,
+                windy,
+                List.copyOf(entries)
+            ))
         );
         System.out.println(
             "CrownWindDeltaExport: PASS entries=" + entries.size()
                 + " output=" + output.toAbsolutePath()
         );
+    }
+
+    private static void verifyDelta(
+        ConiferSpeciesProfile species,
+        TreeQualityTier quality,
+        Delta delta
+    ) {
+        String label = species + " " + quality;
+        require(delta.meanWindProjection() > MIN_PROJECTION_DELTA,
+            label + " crown wind projection delta too small: " + delta.meanWindProjection());
+        require(delta.meanDirectionalBalance() > MIN_BALANCE_DELTA,
+            label + " crown directional balance delta too small: "
+                + delta.meanDirectionalBalance());
+        require(delta.leewardShare() > MIN_LEEWARD_SHARE_DELTA,
+            label + " crown leeward-share delta too small: " + delta.leewardShare());
     }
 
     private static SampleSummary measure(
@@ -85,7 +90,6 @@ public final class CrownWindDeltaExport {
         long neutral = 0L;
         double projection = 0.0;
         double balance = 0.0;
-
         for (int index = 0; index < SAMPLES; index++) {
             long seed = TreeLifeHistory.mix(
                 ROOT_SEED
@@ -94,15 +98,12 @@ public final class CrownWindDeltaExport {
                     ^ index * 0x9E3779B97F4A7C15L
             );
             ProceduralTreePlan plan = new ProceduralTreePlan(
-                seed,
-                species,
-                quality,
-                growthEnvironment,
+                seed, species, quality, growthEnvironment,
                 quality == TreeQualityTier.HERO
             );
-            VoxelTreeModel model = TreeGenerationPipeline.generate(plan).model();
             CrownBiasMetrics metrics = CrownBiasMetrics.measure(
-                model, measurementEnvironment
+                TreeGenerationPipeline.generate(plan).model(),
+                measurementEnvironment
             );
             leaves += metrics.leafCount();
             leeward += metrics.leewardLeaves();
@@ -111,14 +112,9 @@ public final class CrownWindDeltaExport {
             projection += metrics.windProjection();
             balance += metrics.directionalBalance();
         }
-
         return new SampleSummary(
-            leaves,
-            leeward,
-            windward,
-            neutral,
-            projection / SAMPLES,
-            balance / SAMPLES
+            leaves, leeward, windward, neutral,
+            projection / SAMPLES, balance / SAMPLES
         );
     }
 
@@ -134,6 +130,12 @@ public final class CrownWindDeltaExport {
             0.62, 0.38, 0.22, 0.04,
             0.0, 0.0, 0.68, -0.12, 138
         );
+    }
+
+    private static void require(boolean condition, String message) {
+        if (!condition) {
+            throw new AssertionError(message);
+        }
     }
 
     private record SampleSummary(
