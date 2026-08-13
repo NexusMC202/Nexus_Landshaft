@@ -4,6 +4,8 @@ import java.util.List;
 
 /** Verifies crown center-of-mass and directional wind-side measurements. */
 public final class CrownBiasMetricsSelfTest {
+    private static final int AGGREGATE_SEED_COUNT = 8;
+
     private CrownBiasMetricsSelfTest() {
     }
 
@@ -12,6 +14,7 @@ public final class CrownBiasMetricsSelfTest {
         verifyCalmCrownIsNeutral();
         verifyGeneratedWindyMetricsAreDeterministic();
         verifySpeciesQualityWindMatrix();
+        verifyAggregateLeewardResponse();
         System.out.println("CrownBiasMetricsSelfTest: PASS");
     }
 
@@ -140,13 +143,55 @@ public final class CrownBiasMetricsSelfTest {
         }
     }
 
+    private static void verifyAggregateLeewardResponse() {
+        TreeEnvironment windy = windyEnvironment();
+        long rootSeed = 0x4C454557415244L;
+        for (ConiferSpeciesProfile species : ConiferSpeciesProfile.values()) {
+            for (TreeQualityTier quality : TreeQualityTier.values()) {
+                long leeward = 0L;
+                long windward = 0L;
+                double projectionSum = 0.0;
+                int directionalTrees = 0;
+
+                for (int index = 0; index < AGGREGATE_SEED_COUNT; index++) {
+                    long seed = TreeLifeHistory.mix(
+                        rootSeed
+                            ^ ((long)species.ordinal() << 56)
+                            ^ ((long)quality.ordinal() << 48)
+                            ^ index * 0x9E3779B97F4A7C15L
+                    );
+                    ProceduralTreePlan plan = new ProceduralTreePlan(
+                        seed,
+                        species,
+                        quality,
+                        windy,
+                        quality == TreeQualityTier.HERO
+                    );
+                    VoxelTreeModel model = generate(plan);
+                    CrownBiasMetrics metrics = CrownBiasMetrics.measure(model, windy);
+                    leeward += metrics.leewardLeaves();
+                    windward += metrics.windwardLeaves();
+                    projectionSum += metrics.windProjection();
+                    if (metrics.sideLeaves() > 0) {
+                        directionalTrees++;
+                    }
+                }
+
+                String label = species + " " + quality;
+                require(directionalTrees == AGGREGATE_SEED_COUNT,
+                    label + " aggregate matrix contains non-directional windy crown");
+                require(leeward > windward,
+                    label + " aggregate foliage does not favor leeward side: "
+                        + leeward + " <= " + windward);
+                require(projectionSum / AGGREGATE_SEED_COUNT > 0.0,
+                    label + " aggregate crown center is not displaced leeward: mean="
+                        + projectionSum / AGGREGATE_SEED_COUNT);
+            }
+        }
+    }
+
     private static VoxelTreeModel generate(ProceduralTreePlan procedural) {
-        AnatomyPlan anatomy = AnatomyPlan.resolve(procedural);
-        BranchGraph base = SpeciesConiferBranchGenerator.generate(anatomy);
-        WindDeformationPlan wind = WindDeformationPlan.resolve(anatomy);
-        BranchGraph graph = wind.apply(base, anatomy);
-        CanopyPlan canopy = anatomy.canopy(graph);
-        return TreeVoxelizer.voxelize(graph, procedural.quality(), canopy);
+        return TreeGenerationPipeline.generate(procedural).model();
     }
 
     private static TreeEnvironment windyEnvironment() {
