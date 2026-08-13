@@ -5,6 +5,7 @@ import static net.minecraft.commands.Commands.literal;
 import com.mojang.brigadier.CommandDispatcher;
 import dev.nexusmc.landscape.worldgen.v2.tree.TreeMaterialResolver;
 import dev.nexusmc.landscape.worldgen.v2.tree.TreeModelCache;
+import dev.nexusmc.landscape.worldgen.v2.tree.TreePlacementProbeTelemetry;
 import dev.nexusmc.landscape.worldgen.v2.tree.TreeRuntimeTelemetry;
 import java.util.Locale;
 import net.minecraft.commands.CommandSourceStack;
@@ -30,6 +31,8 @@ public final class TreeDebugCommand {
 
     private static int counters(CommandSourceStack source) {
         TreeRuntimeTelemetry.Snapshot runtime = TreeRuntimeTelemetry.snapshot();
+        TreePlacementProbeTelemetry.Snapshot probes =
+            TreePlacementProbeTelemetry.snapshot();
         TreeModelCache.Snapshot cache = TreeModelCache.snapshot();
         TreeModelCache.StructureSnapshot structure =
             TreeModelCache.structureSnapshot();
@@ -66,6 +69,23 @@ public final class TreeDebugCommand {
         ));
         send(source, String.format(
             Locale.ROOT,
+            "envelope_checks=%d envelope_probes=%d avg_envelope_probes=%.2f "
+                + "final_checks=%d final_probes=%d avg_final_probes=%.2f",
+            probes.envelopeChecks(),
+            probes.envelopeProbes(),
+            probes.averageEnvelopeProbes(),
+            probes.finalChecks(),
+            probes.finalProbes(),
+            probes.averageFinalProbes()
+        ));
+        send(source, String.format(
+            Locale.ROOT,
+            "probe_checks=%d probe_total=%d",
+            probes.totalChecks(),
+            probes.totalProbes()
+        ));
+        send(source, String.format(
+            Locale.ROOT,
             "generated_segments=%d trunk=%d roots=%d live_branches=%d "
                 + "dead_branches=%d secondary_leaders=%d",
             structure.totalSegments(),
@@ -98,6 +118,7 @@ public final class TreeDebugCommand {
 
     private static int reset(CommandSourceStack source) {
         TreeRuntimeTelemetry.reset();
+        TreePlacementProbeTelemetry.reset();
         TreeModelCache.clear();
         TreeMaterialResolver.clearCache();
         source.sendSuccess(() -> Component.literal(
