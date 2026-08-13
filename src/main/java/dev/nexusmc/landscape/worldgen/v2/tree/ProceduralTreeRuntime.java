@@ -154,7 +154,7 @@ public final class ProceduralTreeRuntime {
             return new CheckResult(false, probes);
         }
         probes++;
-        if (!level.getFluidState(base).isEmpty()) {
+        if (!level.getBlockState(base).getFluidState().isEmpty()) {
             return new CheckResult(false, probes);
         }
 
@@ -193,9 +193,11 @@ public final class ProceduralTreeRuntime {
         WorldGenLevel level,
         BlockPos position
     ) {
-        return withinBuildHeight(level, position)
-            && level.getFluidState(position).isEmpty()
-            && level.getBlockState(position).canBeReplaced();
+        if (!withinBuildHeight(level, position)) {
+            return false;
+        }
+        BlockState state = level.getBlockState(position);
+        return state.getFluidState().isEmpty() && state.canBeReplaced();
     }
 
     private static CheckResult checkModelPlacement(
@@ -210,24 +212,29 @@ public final class ProceduralTreeRuntime {
             return new CheckResult(false, probes);
         }
         probes++;
-        if (!level.getFluidState(base).isEmpty()) {
+        if (!level.getBlockState(base).getFluidState().isEmpty()) {
             return new CheckResult(false, probes);
         }
         for (VoxelTreeModel.Voxel voxel : model.wood()) {
             BlockPos position = absolute(base, voxel);
             probes++;
-            if (!withinBuildHeight(level, position)
-                || !level.getFluidState(position).isEmpty()
-                || !woodPositionAvailable(level, position, voxel.y())) {
+            if (!withinBuildHeight(level, position)) {
+                return new CheckResult(false, probes);
+            }
+            BlockState state = level.getBlockState(position);
+            if (!state.getFluidState().isEmpty()
+                || !woodPositionAvailable(state, voxel.y())) {
                 return new CheckResult(false, probes);
             }
         }
         for (VoxelTreeModel.Voxel voxel : model.leaves()) {
             BlockPos position = absolute(base, voxel);
             probes++;
-            if (!withinBuildHeight(level, position)
-                || !level.getFluidState(position).isEmpty()
-                || !level.getBlockState(position).canBeReplaced()) {
+            if (!withinBuildHeight(level, position)) {
+                return new CheckResult(false, probes);
+            }
+            BlockState state = level.getBlockState(position);
+            if (!state.getFluidState().isEmpty() || !state.canBeReplaced()) {
                 return new CheckResult(false, probes);
             }
         }
@@ -235,11 +242,9 @@ public final class ProceduralTreeRuntime {
     }
 
     private static boolean woodPositionAvailable(
-        WorldGenLevel level,
-        BlockPos position,
+        BlockState state,
         int relativeY
     ) {
-        BlockState state = level.getBlockState(position);
         if (state.canBeReplaced()) {
             return true;
         }
