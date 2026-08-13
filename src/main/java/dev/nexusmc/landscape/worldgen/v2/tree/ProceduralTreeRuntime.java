@@ -153,10 +153,6 @@ public final class ProceduralTreeRuntime {
         if (level.getBlockState(ground).isAir()) {
             return new CheckResult(false, probes);
         }
-        probes++;
-        if (!level.getBlockState(base).getFluidState().isEmpty()) {
-            return new CheckResult(false, probes);
-        }
 
         int verticalProbes = Math.max(3, envelope.probeCount() / 3);
         for (int index = 0; index < verticalProbes; index++) {
