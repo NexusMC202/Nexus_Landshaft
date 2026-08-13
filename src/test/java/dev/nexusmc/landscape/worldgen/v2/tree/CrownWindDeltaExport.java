@@ -16,6 +16,9 @@ public final class CrownWindDeltaExport {
     private static final double MIN_PROJECTION_DELTA = 0.50;
     private static final double MIN_BALANCE_DELTA = 0.20;
     private static final double MIN_LEEWARD_SHARE_DELTA = 0.10;
+    private static final long MIN_PINE_FOLIAGE_RETENTION_ADVANTAGE = 40L;
+    private static final double MIN_HERO_PINE_PROJECTION_ADVANTAGE = 0.20;
+    private static final double MIN_HERO_PINE_BALANCE_ADVANTAGE = 0.20;
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     private CrownWindDeltaExport() {
@@ -44,6 +47,7 @@ public final class CrownWindDeltaExport {
                 entries.add(new Entry(species, quality, calmSummary, windySummary, delta));
             }
         }
+        verifySpeciesIdentity(entries);
 
         Files.writeString(
             output.resolve("crown-wind-delta.json"),
@@ -76,6 +80,48 @@ public final class CrownWindDeltaExport {
                 + delta.meanDirectionalBalance());
         require(delta.leewardShare() > MIN_LEEWARD_SHARE_DELTA,
             label + " crown leeward-share delta too small: " + delta.leewardShare());
+    }
+
+    private static void verifySpeciesIdentity(List<Entry> entries) {
+        for (TreeQualityTier quality : TreeQualityTier.values()) {
+            Entry spruce = find(entries, ConiferSpeciesProfile.SPRUCE, quality);
+            Entry pine = find(entries, ConiferSpeciesProfile.PINE, quality);
+            long foliageRetentionAdvantage = pine.windyMinusCalm().leafCount()
+                - spruce.windyMinusCalm().leafCount();
+            require(foliageRetentionAdvantage > MIN_PINE_FOLIAGE_RETENTION_ADVANTAGE,
+                quality + " pine no longer retains distinctly more foliage than spruce: "
+                    + foliageRetentionAdvantage);
+        }
+
+        Entry spruceHero = find(
+            entries, ConiferSpeciesProfile.SPRUCE, TreeQualityTier.HERO
+        );
+        Entry pineHero = find(
+            entries, ConiferSpeciesProfile.PINE, TreeQualityTier.HERO
+        );
+        double projectionAdvantage = pineHero.windyMinusCalm().meanWindProjection()
+            - spruceHero.windyMinusCalm().meanWindProjection();
+        double balanceAdvantage = pineHero.windyMinusCalm().meanDirectionalBalance()
+            - spruceHero.windyMinusCalm().meanDirectionalBalance();
+        require(projectionAdvantage > MIN_HERO_PINE_PROJECTION_ADVANTAGE,
+            "HERO pine projection response is no longer distinct from spruce: "
+                + projectionAdvantage);
+        require(balanceAdvantage > MIN_HERO_PINE_BALANCE_ADVANTAGE,
+            "HERO pine directional response is no longer distinct from spruce: "
+                + balanceAdvantage);
+    }
+
+    private static Entry find(
+        List<Entry> entries,
+        ConiferSpeciesProfile species,
+        TreeQualityTier quality
+    ) {
+        for (Entry entry : entries) {
+            if (entry.species() == species && entry.quality() == quality) {
+                return entry;
+            }
+        }
+        throw new AssertionError("missing crown delta entry: " + species + " " + quality);
     }
 
     private static SampleSummary measure(
