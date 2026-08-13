@@ -3,6 +3,7 @@ package dev.nexusmc.landscape.command;
 import static net.minecraft.commands.Commands.literal;
 
 import com.mojang.brigadier.CommandDispatcher;
+import dev.nexusmc.landscape.worldgen.v2.tree.TreeMaterialResolver;
 import dev.nexusmc.landscape.worldgen.v2.tree.TreeModelCache;
 import dev.nexusmc.landscape.worldgen.v2.tree.TreeRuntimeTelemetry;
 import java.util.Locale;
@@ -56,10 +57,12 @@ public final class TreeDebugCommand {
         ));
         send(source, String.format(
             Locale.ROOT,
-            "cache_size=%d cache_capacity=%d cache_requests=%d",
+            "cache_size=%d cache_capacity=%d cache_requests=%d "
+                + "material_cache_size=%d",
             cache.size(),
             cache.capacity(),
-            cache.requests()
+            cache.requests(),
+            TreeMaterialResolver.cacheSize()
         ));
         send(source, String.format(
             Locale.ROOT,
@@ -96,8 +99,9 @@ public final class TreeDebugCommand {
     private static int reset(CommandSourceStack source) {
         TreeRuntimeTelemetry.reset();
         TreeModelCache.clear();
+        TreeMaterialResolver.clearCache();
         source.sendSuccess(() -> Component.literal(
-            "Nexus procedural tree counters and model cache reset."
+            "Nexus procedural tree counters and caches reset."
         ), false);
         return 1;
     }
