@@ -20,6 +20,7 @@ public final class TreeModelFoundationSelfTest {
         verifyVoxelizer();
         verifyRuntimePolicy();
         TreePreviewExport.main(new String[0]);
+        CrownWindResponseExport.main(new String[0]);
         System.out.println("TreeModelFoundationSelfTest: PASS");
     }
 
