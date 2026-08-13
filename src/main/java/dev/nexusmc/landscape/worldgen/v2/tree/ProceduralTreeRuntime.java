@@ -52,13 +52,17 @@ public final class ProceduralTreeRuntime {
             plan.environment(),
             plan.envelope()
         );
-        if (!canFitEnvelope(level, base, plan.envelope())) {
+        CheckResult envelopeCheck = checkEnvelope(level, base, plan.envelope());
+        TreePlacementProbeTelemetry.recordEnvelope(envelopeCheck.probes());
+        if (!envelopeCheck.allowed()) {
             return Placement.withoutLookup(false);
         }
 
         TreeModelCache.Lookup lookup = TreeModelCache.getOrCreateDetailed(plan);
         VoxelTreeModel model = lookup.model();
-        if (!canPlace(level, base, model)) {
+        CheckResult finalCheck = checkModelPlacement(level, base, model);
+        TreePlacementProbeTelemetry.recordFinal(finalCheck.probes());
+        if (!finalCheck.allowed()) {
             return Placement.afterLookup(false, lookup.cacheHit());
         }
         placeModel(level, base, model, plan.species().materialProfile());
@@ -103,7 +107,9 @@ public final class ProceduralTreeRuntime {
             return false;
         }
         requireRuntimeInputs(level, base, species, quality, environment, envelope);
-        if (!canFitEnvelope(level, base, envelope)) {
+        CheckResult envelopeCheck = checkEnvelope(level, base, envelope);
+        TreePlacementProbeTelemetry.recordEnvelope(envelopeCheck.probes());
+        if (!envelopeCheck.allowed()) {
             return false;
         }
 
@@ -113,7 +119,9 @@ public final class ProceduralTreeRuntime {
             quality,
             environment
         ).model();
-        if (!canPlace(level, base, model)) {
+        CheckResult finalCheck = checkModelPlacement(level, base, model);
+        TreePlacementProbeTelemetry.recordFinal(finalCheck.probes());
+        if (!finalCheck.allowed()) {
             return false;
         }
         placeModel(level, base, model, species.materialProfile());
@@ -134,15 +142,20 @@ public final class ProceduralTreeRuntime {
         }
     }
 
-    private static boolean canFitEnvelope(
+    private static CheckResult checkEnvelope(
         WorldGenLevel level,
         BlockPos base,
         TreePlacementEnvelope envelope
     ) {
+        int probes = 0;
         BlockPos ground = base.below();
-        if (level.getBlockState(ground).isAir()
-            || !level.getFluidState(base).isEmpty()) {
-            return false;
+        probes++;
+        if (level.getBlockState(ground).isAir()) {
+            return new CheckResult(false, probes);
+        }
+        probes++;
+        if (!level.getFluidState(base).isEmpty()) {
+            return new CheckResult(false, probes);
         }
 
         int verticalProbes = Math.max(3, envelope.probeCount() / 3);
@@ -150,8 +163,9 @@ public final class ProceduralTreeRuntime {
             int y = (int)Math.round(
                 envelope.height() * index / (double)(verticalProbes - 1)
             );
+            probes++;
             if (!probeReplaceable(level, base.above(y))) {
-                return false;
+                return new CheckResult(false, probes);
             }
         }
 
@@ -167,11 +181,12 @@ public final class ProceduralTreeRuntime {
                 crownY + (index % 3 - 1),
                 (int)Math.round(Math.sin(angle) * radius)
             );
+            probes++;
             if (!probeReplaceable(level, probe)) {
-                return false;
+                return new CheckResult(false, probes);
             }
         }
-        return true;
+        return new CheckResult(true, probes);
     }
 
     private static boolean probeReplaceable(
@@ -183,33 +198,40 @@ public final class ProceduralTreeRuntime {
             && level.getBlockState(position).canBeReplaced();
     }
 
-    private static boolean canPlace(
+    private static CheckResult checkModelPlacement(
         WorldGenLevel level,
         BlockPos base,
         VoxelTreeModel model
     ) {
+        int probes = 0;
         BlockPos ground = base.below();
-        if (level.getBlockState(ground).isAir()
-            || !level.getFluidState(base).isEmpty()) {
-            return false;
+        probes++;
+        if (level.getBlockState(ground).isAir()) {
+            return new CheckResult(false, probes);
+        }
+        probes++;
+        if (!level.getFluidState(base).isEmpty()) {
+            return new CheckResult(false, probes);
         }
         for (VoxelTreeModel.Voxel voxel : model.wood()) {
             BlockPos position = absolute(base, voxel);
+            probes++;
             if (!withinBuildHeight(level, position)
                 || !level.getFluidState(position).isEmpty()
                 || !woodPositionAvailable(level, position, voxel.y())) {
-                return false;
+                return new CheckResult(false, probes);
             }
         }
         for (VoxelTreeModel.Voxel voxel : model.leaves()) {
             BlockPos position = absolute(base, voxel);
+            probes++;
             if (!withinBuildHeight(level, position)
                 || !level.getFluidState(position).isEmpty()
                 || !level.getBlockState(position).canBeReplaced()) {
-                return false;
+                return new CheckResult(false, probes);
             }
         }
-        return true;
+        return new CheckResult(true, probes);
     }
 
     private static boolean woodPositionAvailable(
@@ -312,6 +334,14 @@ public final class ProceduralTreeRuntime {
         VoxelTreeModel.Voxel voxel
     ) {
         return base.offset(voxel.x(), voxel.y(), voxel.z());
+    }
+
+    private record CheckResult(boolean allowed, int probes) {
+        private CheckResult {
+            if (probes < 0) {
+                throw new IllegalArgumentException("tree probe count cannot be negative");
+            }
+        }
     }
 
     public record Placement(
