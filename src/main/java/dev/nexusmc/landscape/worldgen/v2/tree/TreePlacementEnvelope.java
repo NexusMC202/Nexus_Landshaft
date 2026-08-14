@@ -52,6 +52,10 @@ public record TreePlacementEnvelope(
             * (1.0 - environment.forestCompetition() * 0.12);
         int radius = (int)Math.ceil(baseRadius * radiusScale);
         radius += WindDeformationPlan.conservativeExtraRadius(quality, environment);
+        // Branch estimates describe the skeleton. Voxelization and canopy growth can
+        // occupy one extra block beyond that skeleton, so keep the cheap envelope
+        // conservative rather than allowing the final placement check to discover it.
+        radius += 1;
         radius = Math.max(2, Math.min(radius, quality.budget().maxHorizontalRadius()));
 
         int underground = quality == TreeQualityTier.BASIC ? 1 : 2;
