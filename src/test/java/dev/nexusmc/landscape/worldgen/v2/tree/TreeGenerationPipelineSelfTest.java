@@ -2,6 +2,7 @@ package dev.nexusmc.landscape.worldgen.v2.tree;
 
 /** Verifies that all callers share one deterministic complete-tree pipeline. */
 public final class TreeGenerationPipelineSelfTest {
+    private static final int SEED_SWEEP_COUNT = 8;
     private static final VoxelTreeModel.Voxel ORIGIN_WOOD =
         new VoxelTreeModel.Voxel(0, 0, 0);
 
@@ -10,18 +11,13 @@ public final class TreeGenerationPipelineSelfTest {
 
     public static void main(String[] args) {
         verifyMatrixDeterminismAndCacheParity();
+        verifySeedSweepStructuralSafety();
         System.out.println("TreeGenerationPipelineSelfTest: PASS");
     }
 
     private static void verifyMatrixDeterminismAndCacheParity() {
-        TreeEnvironment calm = new TreeEnvironment(
-            0.12, 0.66, 0.42, 0.08,
-            0.0, 0.0, 0.28, 0.05, 92
-        );
-        TreeEnvironment windy = new TreeEnvironment(
-            0.62, 0.38, 0.22, 0.04,
-            -0.92, 0.24, 0.68, -0.12, 138
-        );
+        TreeEnvironment calm = calmEnvironment();
+        TreeEnvironment windy = windyEnvironment();
         TreeEnvironment[] environments = {calm, windy};
         long rootSeed = 0x504950454C494E45L;
 
@@ -73,6 +69,7 @@ public final class TreeGenerationPipelineSelfTest {
                         label + " generated model is missing trunk base voxel");
                     verifyGroundInteraction(label, first);
                     verifyEnvelopeContains(label, plan.envelope(), first.model());
+                    verifyBudgetAndMass(label, quality, first.model());
 
                     TreeModelCache.clear();
                     TreeModelCache.Lookup lookup = TreeModelCache.getOrCreateDetailed(plan);
@@ -89,6 +86,71 @@ public final class TreeGenerationPipelineSelfTest {
             }
         }
         TreeModelCache.clear();
+    }
+
+    private static void verifySeedSweepStructuralSafety() {
+        TreeEnvironment[] environments = {calmEnvironment(), windyEnvironment()};
+        long rootSeed = 0x5354524553535345L;
+        int generated = 0;
+
+        for (ConiferSpeciesProfile species : ConiferSpeciesProfile.values()) {
+            for (TreeQualityTier quality : TreeQualityTier.values()) {
+                for (int environmentIndex = 0;
+                     environmentIndex < environments.length;
+                     environmentIndex++) {
+                    TreeEnvironment environment = environments[environmentIndex];
+                    for (int seedIndex = 0; seedIndex < SEED_SWEEP_COUNT; seedIndex++) {
+                        long seed = TreeLifeHistory.mix(
+                            rootSeed
+                                ^ ((long)species.ordinal() << 56)
+                                ^ ((long)quality.ordinal() << 48)
+                                ^ ((long)environmentIndex << 40)
+                                ^ seedIndex * 0x9E3779B97F4A7C15L
+                        );
+                        ProceduralTreePlan plan = new ProceduralTreePlan(
+                            seed,
+                            species,
+                            quality,
+                            environment,
+                            quality == TreeQualityTier.HERO
+                        );
+                        TreeGenerationPipeline.GeneratedTree tree =
+                            TreeGenerationPipeline.generate(plan);
+                        String label = "sweep/" + species + "/" + quality
+                            + "/env=" + environmentIndex + "/seed=" + seedIndex;
+
+                        require(tree.model().wood().contains(ORIGIN_WOOD),
+                            label + " lost trunk base voxel");
+                        verifyBudgetAndMass(label, quality, tree.model());
+                        verifyGroundInteraction(label, tree);
+                        verifyEnvelopeContains(label, plan.envelope(), tree.model());
+                        generated++;
+                    }
+                }
+            }
+        }
+
+        require(generated == ConiferSpeciesProfile.values().length
+                * TreeQualityTier.values().length
+                * environments.length
+                * SEED_SWEEP_COUNT,
+            "seed sweep did not cover the complete tree matrix");
+    }
+
+    private static void verifyBudgetAndMass(
+        String label,
+        TreeQualityTier quality,
+        VoxelTreeModel model
+    ) {
+        TreeQualityTier.TreeBudget budget = quality.budget();
+        require(!model.wood().isEmpty(), label + " generated no wood");
+        require(!model.leaves().isEmpty(), label + " generated no foliage");
+        require(model.wood().size() <= budget.maxWoodBlocks(),
+            label + " exceeded wood budget: " + model.wood().size()
+                + " > " + budget.maxWoodBlocks());
+        require(model.leaves().size() <= budget.maxLeafBlocks(),
+            label + " exceeded foliage budget: " + model.leaves().size()
+                + " > " + budget.maxLeafBlocks());
     }
 
     private static void verifyGroundInteraction(
@@ -145,6 +207,20 @@ public final class TreeGenerationPipelineSelfTest {
         require(-minWoodY <= envelope.undergroundDepth(),
             label + " model escaped envelope underground depth: model="
                 + (-minWoodY) + " envelope=" + envelope.undergroundDepth());
+    }
+
+    private static TreeEnvironment calmEnvironment() {
+        return new TreeEnvironment(
+            0.12, 0.66, 0.42, 0.08,
+            0.0, 0.0, 0.28, 0.05, 92
+        );
+    }
+
+    private static TreeEnvironment windyEnvironment() {
+        return new TreeEnvironment(
+            0.62, 0.38, 0.22, 0.04,
+            -0.92, 0.24, 0.68, -0.12, 138
+        );
     }
 
     private static void require(boolean condition, String message) {
