@@ -15,9 +15,9 @@ import java.util.Map;
  * resources.
  */
 public final class TreePreviewExport {
-    private static final int FORMAT_VERSION = 7;
+    private static final int FORMAT_VERSION = 8;
     private static final String GENERATOR_ID =
-        "nexus_landscape:conifer_species_materials_v7";
+        "nexus_landscape:conifer_species_materials_v8";
     private static final Gson GSON = new GsonBuilder()
         .setPrettyPrinting()
         .create();
@@ -76,6 +76,7 @@ public final class TreePreviewExport {
                     CrownBiasMetrics crownBias = CrownBiasMetrics.measure(
                         model, environment
                     );
+                    CrownShapeMetrics crownShape = CrownShapeMetrics.measure(model);
                     TreePlacementEnvelope envelope = TreePlacementEnvelope.estimate(
                         species, quality, environment, quality == TreeQualityTier.HERO
                     );
@@ -98,6 +99,7 @@ public final class TreePreviewExport {
                         wind,
                         canopy,
                         crownBias,
+                        crownShape,
                         envelope,
                         baseGraph.fingerprint(),
                         graph.fingerprint(),
@@ -227,6 +229,7 @@ public final class TreePreviewExport {
         WindDeformationPlan windDeformation,
         CanopyPlan canopyPlan,
         CrownBiasMetrics crownBias,
+        CrownShapeMetrics crownShape,
         TreePlacementEnvelope placementEnvelope,
         long baseBranchFingerprint,
         long deformedBranchFingerprint,
