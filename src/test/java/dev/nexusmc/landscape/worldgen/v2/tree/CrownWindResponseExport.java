@@ -51,6 +51,7 @@ public final class CrownWindResponseExport {
             GSON.toJson(export)
         );
         CrownWindDeltaExport.main(new String[]{output.toString()});
+        CrownShapeMetricsSelfTest.main(new String[0]);
         System.out.println(
             "CrownWindResponseExport: PASS entries=" + entries.size()
                 + " output=" + output.toAbsolutePath()
