@@ -21,6 +21,9 @@ public final class CrownShapeMetricsSelfTest {
             Aggregate pine = measure(ConiferSpeciesProfile.PINE, quality, calm);
             String label = quality.toString();
 
+            verifyScaleRange(ConiferSpeciesProfile.SPRUCE, quality, spruce);
+            verifyScaleRange(ConiferSpeciesProfile.PINE, quality, pine);
+
             require(spruce.meanLowerShare() >= 0.45 && spruce.meanLowerShare() <= 0.65,
                 label + " spruce lower-crown share escaped silhouette range: "
                     + spruce.meanLowerShare());
@@ -52,6 +55,43 @@ public final class CrownShapeMetricsSelfTest {
             previousPine = pine;
         }
         System.out.println("CrownShapeMetricsSelfTest: PASS");
+    }
+
+    private static void verifyScaleRange(
+        ConiferSpeciesProfile species,
+        TreeQualityTier quality,
+        Aggregate aggregate
+    ) {
+        ScaleRange range = scaleRange(species, quality);
+        String label = species + " " + quality;
+        require(between(aggregate.meanLeafCount(), range.minLeaves(), range.maxLeaves()),
+            label + " crown leaf mass escaped expected range: " + aggregate.meanLeafCount());
+        require(between(aggregate.meanHeight(), range.minHeight(), range.maxHeight()),
+            label + " crown height escaped expected range: " + aggregate.meanHeight());
+        require(between(aggregate.meanHorizontalSpan(), range.minSpan(), range.maxSpan()),
+            label + " crown width escaped expected range: " + aggregate.meanHorizontalSpan());
+    }
+
+    private static ScaleRange scaleRange(
+        ConiferSpeciesProfile species,
+        TreeQualityTier quality
+    ) {
+        if (species == ConiferSpeciesProfile.SPRUCE) {
+            return switch (quality) {
+                case BASIC -> new ScaleRange(60, 145, 6.0, 13.0, 4.0, 9.5);
+                case MID -> new ScaleRange(135, 300, 10.0, 20.0, 7.0, 15.5);
+                case HERO -> new ScaleRange(230, 480, 16.0, 30.0, 12.0, 24.0);
+            };
+        }
+        return switch (quality) {
+            case BASIC -> new ScaleRange(28, 90, 4.0, 9.0, 3.5, 8.0);
+            case MID -> new ScaleRange(40, 125, 5.5, 13.0, 6.0, 13.0);
+            case HERO -> new ScaleRange(75, 200, 9.0, 19.0, 10.0, 21.0);
+        };
+    }
+
+    private static boolean between(double value, double min, double max) {
+        return value >= min && value <= max;
     }
 
     private static void verifyTierGrowth(
@@ -118,6 +158,16 @@ public final class CrownShapeMetricsSelfTest {
         if (!condition) {
             throw new AssertionError(message);
         }
+    }
+
+    private record ScaleRange(
+        double minLeaves,
+        double maxLeaves,
+        double minHeight,
+        double maxHeight,
+        double minSpan,
+        double maxSpan
+    ) {
     }
 
     private record Aggregate(
