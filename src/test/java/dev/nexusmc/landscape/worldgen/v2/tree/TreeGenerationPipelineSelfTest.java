@@ -72,6 +72,7 @@ public final class TreeGenerationPipelineSelfTest {
                     require(first.model().wood().contains(ORIGIN_WOOD),
                         label + " generated model is missing trunk base voxel");
                     verifyGroundInteraction(label, first);
+                    verifyEnvelopeContains(label, plan.envelope(), first.model());
 
                     TreeModelCache.clear();
                     TreeModelCache.Lookup lookup = TreeModelCache.getOrCreateDetailed(plan);
@@ -108,6 +109,42 @@ public final class TreeGenerationPipelineSelfTest {
             require(generated.model().wood().stream().anyMatch(voxel -> voxel.y() < 0),
                 label + " planned roots produced no underground wood");
         }
+    }
+
+    private static void verifyEnvelopeContains(
+        String label,
+        TreePlacementEnvelope envelope,
+        VoxelTreeModel model
+    ) {
+        int maxHorizontal = 0;
+        int maxY = Integer.MIN_VALUE;
+        int minWoodY = Integer.MAX_VALUE;
+
+        for (VoxelTreeModel.Voxel voxel : model.wood()) {
+            maxHorizontal = Math.max(
+                maxHorizontal,
+                Math.max(Math.abs(voxel.x()), Math.abs(voxel.z()))
+            );
+            maxY = Math.max(maxY, voxel.y());
+            minWoodY = Math.min(minWoodY, voxel.y());
+        }
+        for (VoxelTreeModel.Voxel voxel : model.leaves()) {
+            maxHorizontal = Math.max(
+                maxHorizontal,
+                Math.max(Math.abs(voxel.x()), Math.abs(voxel.z()))
+            );
+            maxY = Math.max(maxY, voxel.y());
+        }
+
+        require(maxHorizontal <= envelope.horizontalRadius(),
+            label + " model escaped envelope radius: model=" + maxHorizontal
+                + " envelope=" + envelope.horizontalRadius());
+        require(maxY <= envelope.height(),
+            label + " model escaped envelope height: model=" + maxY
+                + " envelope=" + envelope.height());
+        require(-minWoodY <= envelope.undergroundDepth(),
+            label + " model escaped envelope underground depth: model="
+                + (-minWoodY) + " envelope=" + envelope.undergroundDepth());
     }
 
     private static void require(boolean condition, String message) {
