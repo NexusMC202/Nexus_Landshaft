@@ -13,19 +13,60 @@ public final class CrownShapeMetricsSelfTest {
             0.62, 0.38, 0.22, 0.04,
             0.0, 0.0, 0.68, -0.12, 138
         );
+
+        Aggregate previousSpruce = null;
+        Aggregate previousPine = null;
         for (TreeQualityTier quality : TreeQualityTier.values()) {
             Aggregate spruce = measure(ConiferSpeciesProfile.SPRUCE, quality, calm);
             Aggregate pine = measure(ConiferSpeciesProfile.PINE, quality, calm);
             String label = quality.toString();
 
-            require(pine.meanLowerShare + 0.05 < spruce.meanLowerShare,
+            require(spruce.meanLowerShare() >= 0.45 && spruce.meanLowerShare() <= 0.65,
+                label + " spruce lower-crown share escaped silhouette range: "
+                    + spruce.meanLowerShare());
+            require(spruce.meanUpperShare() >= 0.12 && spruce.meanUpperShare() <= 0.28,
+                label + " spruce upper-crown share escaped silhouette range: "
+                    + spruce.meanUpperShare());
+            require(pine.meanLowerShare() >= 0.15 && pine.meanLowerShare() <= 0.42,
+                label + " pine lower-crown share escaped silhouette range: "
+                    + pine.meanLowerShare());
+            require(pine.meanUpperShare() >= 0.28 && pine.meanUpperShare() <= 0.50,
+                label + " pine upper-crown share escaped silhouette range: "
+                    + pine.meanUpperShare());
+
+            require(pine.meanLowerShare() + 0.08 < spruce.meanLowerShare(),
                 label + " pine crown is not sufficiently top-heavy: pine="
-                    + pine.meanLowerShare + " spruce=" + spruce.meanLowerShare);
-            require(pine.meanY > spruce.meanY + 0.50,
+                    + pine.meanLowerShare() + " spruce=" + spruce.meanLowerShare());
+            require(pine.meanUpperShare() > spruce.meanUpperShare() + 0.10,
+                label + " pine upper crown is not distinct enough: pine="
+                    + pine.meanUpperShare() + " spruce=" + spruce.meanUpperShare());
+            require(pine.meanY() > spruce.meanY() + 0.50,
                 label + " pine foliage center is not high enough: pine="
-                    + pine.meanY + " spruce=" + spruce.meanY);
+                    + pine.meanY() + " spruce=" + spruce.meanY());
+
+            if (previousSpruce != null) {
+                verifyTierGrowth("SPRUCE " + label, previousSpruce, spruce);
+                verifyTierGrowth("PINE " + label, previousPine, pine);
+            }
+            previousSpruce = spruce;
+            previousPine = pine;
         }
         System.out.println("CrownShapeMetricsSelfTest: PASS");
+    }
+
+    private static void verifyTierGrowth(
+        String label,
+        Aggregate previous,
+        Aggregate current
+    ) {
+        require(current.meanLeafCount() > previous.meanLeafCount(),
+            label + " leaf count did not grow with quality tier");
+        require(current.meanHeight() > previous.meanHeight(),
+            label + " crown height did not grow with quality tier");
+        require(current.meanHorizontalSpan() > previous.meanHorizontalSpan(),
+            label + " crown width did not grow with quality tier");
+        require(current.meanY() > previous.meanY(),
+            label + " foliage center did not grow with quality tier");
     }
 
     private static Aggregate measure(
@@ -33,8 +74,12 @@ public final class CrownShapeMetricsSelfTest {
         TreeQualityTier quality,
         TreeEnvironment environment
     ) {
-        double lowerShare = 0.0;
+        double leaves = 0.0;
+        double height = 0.0;
+        double span = 0.0;
         double meanY = 0.0;
+        double lowerShare = 0.0;
+        double upperShare = 0.0;
         for (int index = 0; index < SAMPLES; index++) {
             long seed = TreeLifeHistory.mix(
                 ROOT_SEED
@@ -52,10 +97,21 @@ public final class CrownShapeMetricsSelfTest {
             CrownShapeMetrics metrics = CrownShapeMetrics.measure(
                 TreeGenerationPipeline.generate(plan).model()
             );
-            lowerShare += metrics.lowerCrownShare();
+            leaves += metrics.leafCount();
+            height += metrics.height();
+            span += metrics.horizontalSpan();
             meanY += metrics.meanY();
+            lowerShare += metrics.lowerCrownShare();
+            upperShare += metrics.upperCrownShare();
         }
-        return new Aggregate(lowerShare / SAMPLES, meanY / SAMPLES);
+        return new Aggregate(
+            leaves / SAMPLES,
+            height / SAMPLES,
+            span / SAMPLES,
+            meanY / SAMPLES,
+            lowerShare / SAMPLES,
+            upperShare / SAMPLES
+        );
     }
 
     private static void require(boolean condition, String message) {
@@ -64,6 +120,13 @@ public final class CrownShapeMetricsSelfTest {
         }
     }
 
-    private record Aggregate(double meanLowerShare, double meanY) {
+    private record Aggregate(
+        double meanLeafCount,
+        double meanHeight,
+        double meanHorizontalSpan,
+        double meanY,
+        double meanLowerShare,
+        double meanUpperShare
+    ) {
     }
 }
