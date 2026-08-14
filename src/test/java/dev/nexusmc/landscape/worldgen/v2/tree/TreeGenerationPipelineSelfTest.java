@@ -71,6 +71,7 @@ public final class TreeGenerationPipelineSelfTest {
                         label + " quality was lost in pipeline");
                     require(first.model().wood().contains(ORIGIN_WOOD),
                         label + " generated model is missing trunk base voxel");
+                    verifyGroundInteraction(label, first);
 
                     TreeModelCache.clear();
                     TreeModelCache.Lookup lookup = TreeModelCache.getOrCreateDetailed(plan);
@@ -87,6 +88,26 @@ public final class TreeGenerationPipelineSelfTest {
             }
         }
         TreeModelCache.clear();
+    }
+
+    private static void verifyGroundInteraction(
+        String label,
+        TreeGenerationPipeline.GeneratedTree generated
+    ) {
+        require(generated.model().leaves().stream().noneMatch(voxel -> voxel.y() < 0),
+            label + " canopy crossed below ground");
+
+        RootPlan roots = generated.anatomy().roots();
+        for (RootPlan.RootArm arm : roots.arms()) {
+            require(arm.endY() < 0.0,
+                label + " root arm does not anchor below ground");
+            require(arm.endY() >= -1.05,
+                label + " root arm escaped local soil depth: " + arm.endY());
+        }
+        if (!roots.arms().isEmpty()) {
+            require(generated.model().wood().stream().anyMatch(voxel -> voxel.y() < 0),
+                label + " planned roots produced no underground wood");
+        }
     }
 
     private static void require(boolean condition, String message) {
