@@ -52,6 +52,7 @@ public final class CrownWindResponseExport {
         );
         CrownWindDeltaExport.main(new String[]{output.toString()});
         CrownShapeMetricsSelfTest.main(new String[0]);
+        CrownShapeSummaryExport.main(new String[]{output.toString()});
         System.out.println(
             "CrownWindResponseExport: PASS entries=" + entries.size()
                 + " output=" + output.toAbsolutePath()
