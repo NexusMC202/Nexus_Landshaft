@@ -5,6 +5,7 @@ import java.util.List;
 /** Verifies crown center-of-mass and directional wind-side measurements. */
 public final class CrownBiasMetricsSelfTest {
     private static final int AGGREGATE_SEED_COUNT = 8;
+    private static final int MIRRORED_SEED_COUNT = 4;
 
     private CrownBiasMetricsSelfTest() {
     }
@@ -15,6 +16,7 @@ public final class CrownBiasMetricsSelfTest {
         verifyGeneratedWindyMetricsAreDeterministic();
         verifySpeciesQualityWindMatrix();
         verifyAggregateLeewardResponse();
+        verifyMirroredWindResponse();
         System.out.println("CrownBiasMetricsSelfTest: PASS");
     }
 
@@ -190,6 +192,57 @@ public final class CrownBiasMetricsSelfTest {
         }
     }
 
+    private static void verifyMirroredWindResponse() {
+        TreeEnvironment[] directions = {
+            windyEnvironment(),
+            mirroredWindyEnvironment()
+        };
+        long rootSeed = 0x4D4952524F524544L;
+        for (ConiferSpeciesProfile species : ConiferSpeciesProfile.values()) {
+            for (TreeQualityTier quality : TreeQualityTier.values()) {
+                for (int direction = 0; direction < directions.length; direction++) {
+                    TreeEnvironment environment = directions[direction];
+                    long leeward = 0L;
+                    long windward = 0L;
+                    double projectionSum = 0.0;
+
+                    for (int index = 0; index < MIRRORED_SEED_COUNT; index++) {
+                        long seed = TreeLifeHistory.mix(
+                            rootSeed
+                                ^ ((long)species.ordinal() << 56)
+                                ^ ((long)quality.ordinal() << 48)
+                                ^ index * 0x9E3779B97F4A7C15L
+                        );
+                        ProceduralTreePlan plan = new ProceduralTreePlan(
+                            seed,
+                            species,
+                            quality,
+                            environment,
+                            quality == TreeQualityTier.HERO
+                        );
+                        VoxelTreeModel model = generate(plan);
+                        CrownBiasMetrics metrics = CrownBiasMetrics.measure(
+                            model,
+                            environment
+                        );
+                        leeward += metrics.leewardLeaves();
+                        windward += metrics.windwardLeaves();
+                        projectionSum += metrics.windProjection();
+                    }
+
+                    String label = species + " " + quality
+                        + " mirroredDirection=" + direction;
+                    require(leeward > windward,
+                        label + " foliage does not follow wind: "
+                            + leeward + " <= " + windward);
+                    require(projectionSum / MIRRORED_SEED_COUNT > 0.0,
+                        label + " crown center does not follow wind: mean="
+                            + projectionSum / MIRRORED_SEED_COUNT);
+                }
+            }
+        }
+    }
+
     private static VoxelTreeModel generate(ProceduralTreePlan procedural) {
         return TreeGenerationPipeline.generate(procedural).model();
     }
@@ -198,6 +251,13 @@ public final class CrownBiasMetricsSelfTest {
         return new TreeEnvironment(
             0.62, 0.38, 0.22, 0.04,
             -0.92, 0.24, 0.68, -0.12, 138
+        );
+    }
+
+    private static TreeEnvironment mirroredWindyEnvironment() {
+        return new TreeEnvironment(
+            0.62, 0.38, 0.22, 0.04,
+            0.92, -0.24, 0.68, -0.12, 138
         );
     }
 
