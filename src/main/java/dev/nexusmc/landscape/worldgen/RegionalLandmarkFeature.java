@@ -95,11 +95,24 @@ public final class RegionalLandmarkFeature extends Feature<NoneFeatureConfigurat
         RandomSource random,
         Block block
     ) {
-        int radius = 2 + random.nextInt(3);
-        for (int x = -radius; x <= radius; x++) {
-            for (int y = -1; y <= radius; y++) {
-                for (int z = -radius; z <= radius; z++) {
-                    if (x * x + z * z + y * y * 2 > radius * radius + random.nextInt(4)) {
+        int radiusX = 2 + random.nextInt(3);
+        int radiusZ = 2 + random.nextInt(3);
+        int height = 2 + random.nextInt(3);
+        boolean alongX = random.nextBoolean();
+        long shapeSeed = random.nextLong();
+        for (int x = -radiusX; x <= radiusX + height / 2; x++) {
+            for (int y = -1; y <= height; y++) {
+                for (int z = -radiusZ; z <= radiusZ + height / 2; z++) {
+                    if (!RegionalLandmarkShape.angularOutcrop(
+                        shapeSeed,
+                        x,
+                        y,
+                        z,
+                        radiusX,
+                        radiusZ,
+                        height,
+                        alongX
+                    )) {
                         continue;
                     }
                     level.setBlock(base.offset(x, y, z), block.defaultBlockState(), 2);
