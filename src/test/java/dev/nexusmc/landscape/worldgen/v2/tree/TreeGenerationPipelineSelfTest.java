@@ -6,6 +6,7 @@ import java.util.Set;
 /** Verifies that all callers share one deterministic complete-tree pipeline. */
 public final class TreeGenerationPipelineSelfTest {
     private static final int SEED_SWEEP_COUNT = 8;
+    private static final int STRESS_SEED_COUNT = 4;
     private static final VoxelTreeModel.Voxel ORIGIN_WOOD =
         VoxelTreeModel.ORIGIN_WOOD;
 
@@ -15,6 +16,7 @@ public final class TreeGenerationPipelineSelfTest {
     public static void main(String[] args) {
         verifyMatrixDeterminismAndCacheParity();
         verifySeedSweepStructuralSafety();
+        verifyBetaEnvironmentStressMatrix();
         System.out.println("TreeGenerationPipelineSelfTest: PASS");
     }
 
@@ -178,6 +180,63 @@ public final class TreeGenerationPipelineSelfTest {
                 + " > " + budget.maxLeafBlocks());
     }
 
+    private static void verifyBetaEnvironmentStressMatrix() {
+        TreeEnvironment[] environments = betaStressEnvironments();
+        long rootSeed = 0x4245544153545245L;
+        int generated = 0;
+
+        for (ConiferSpeciesProfile species : ConiferSpeciesProfile.values()) {
+            for (TreeQualityTier quality : TreeQualityTier.values()) {
+                for (int environmentIndex = 0;
+                     environmentIndex < environments.length;
+                     environmentIndex++) {
+                    TreeEnvironment environment = environments[environmentIndex];
+                    for (int seedIndex = 0;
+                         seedIndex < STRESS_SEED_COUNT;
+                         seedIndex++) {
+                        long seed = TreeLifeHistory.mix(
+                            rootSeed
+                                ^ ((long)species.ordinal() << 56)
+                                ^ ((long)quality.ordinal() << 48)
+                                ^ ((long)environmentIndex << 40)
+                                ^ seedIndex * 0x9E3779B97F4A7C15L
+                        );
+                        ProceduralTreePlan plan = new ProceduralTreePlan(
+                            seed,
+                            species,
+                            quality,
+                            environment,
+                            quality == TreeQualityTier.HERO
+                        );
+                        TreeGenerationPipeline.GeneratedTree first =
+                            TreeGenerationPipeline.generate(plan);
+                        TreeGenerationPipeline.GeneratedTree repeat =
+                            TreeGenerationPipeline.generate(plan);
+                        String label = "beta-stress/" + species + "/" + quality
+                            + "/env=" + environmentIndex + "/seed=" + seedIndex;
+
+                        require(first.model().fingerprint()
+                                == repeat.model().fingerprint(),
+                            label + " repeat changed model fingerprint");
+                        require(first.model().wood().contains(ORIGIN_WOOD),
+                            label + " lost trunk base voxel");
+                        verifyBudgetAndMass(label, quality, first.model());
+                        verifyGroundInteraction(label, first);
+                        verifyEnvelopeContains(label, plan.envelope(), first.model());
+                        verifyDisjointModel(label, first.model());
+                        generated++;
+                    }
+                }
+            }
+        }
+
+        require(generated == ConiferSpeciesProfile.values().length
+                * TreeQualityTier.values().length
+                * environments.length
+                * STRESS_SEED_COUNT,
+            "beta stress matrix coverage mismatch");
+    }
+
     private static void verifyDisjointModel(
         String label,
         VoxelTreeModel model
@@ -255,6 +314,31 @@ public final class TreeGenerationPipelineSelfTest {
             0.62, 0.38, 0.22, 0.04,
             -0.92, 0.24, 0.68, -0.12, 138
         );
+    }
+
+    private static TreeEnvironment[] betaStressEnvironments() {
+        return new TreeEnvironment[]{
+            new TreeEnvironment(
+                0.08, 0.64, 0.92, 0.03,
+                0.04, -0.02, 0.06, 0.03, 88
+            ),
+            new TreeEnvironment(
+                0.94, 0.24, 0.10, 0.01,
+                -0.96, 0.28, 0.88, -0.32, 214
+            ),
+            new TreeEnvironment(
+                0.18, 0.96, 0.46, 0.34,
+                0.18, 0.08, 0.26, -0.12, 76
+            ),
+            new TreeEnvironment(
+                0.10, 0.56, 0.08, 0.02,
+                0.0, 0.0, -0.86, 0.34, 96
+            ),
+            new TreeEnvironment(
+                0.48, 0.42, 0.78, 0.12,
+                -0.74, 0.44, 0.62, 0.58, 124
+            )
+        };
     }
 
     private static void require(boolean condition, String message) {
