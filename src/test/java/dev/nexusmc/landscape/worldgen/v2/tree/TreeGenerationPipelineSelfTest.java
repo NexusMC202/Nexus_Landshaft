@@ -1,5 +1,8 @@
 package dev.nexusmc.landscape.worldgen.v2.tree;
 
+import java.util.HashSet;
+import java.util.Set;
+
 /** Verifies that all callers share one deterministic complete-tree pipeline. */
 public final class TreeGenerationPipelineSelfTest {
     private static final int SEED_SWEEP_COUNT = 8;
@@ -99,6 +102,9 @@ public final class TreeGenerationPipelineSelfTest {
                      environmentIndex < environments.length;
                      environmentIndex++) {
                     TreeEnvironment environment = environments[environmentIndex];
+                    Set<Long> fingerprints = new HashSet<>();
+                    Set<ShapeSignature> shapes = new HashSet<>();
+
                     for (int seedIndex = 0; seedIndex < SEED_SWEEP_COUNT; seedIndex++) {
                         long seed = TreeLifeHistory.mix(
                             rootSeed
@@ -124,8 +130,25 @@ public final class TreeGenerationPipelineSelfTest {
                         verifyBudgetAndMass(label, quality, tree.model());
                         verifyGroundInteraction(label, tree);
                         verifyEnvelopeContains(label, plan.envelope(), tree.model());
+
+                        fingerprints.add(tree.model().fingerprint());
+                        CrownShapeMetrics metrics = CrownShapeMetrics.measure(tree.model());
+                        shapes.add(new ShapeSignature(
+                            metrics.leafCount(),
+                            metrics.height(),
+                            (int)Math.round(metrics.horizontalSpan() * 2.0)
+                        ));
                         generated++;
                     }
+
+                    String variationLabel = species + "/" + quality
+                        + "/env=" + environmentIndex;
+                    require(fingerprints.size() >= 4,
+                        variationLabel + " seed sweep collapsed model identity: unique="
+                            + fingerprints.size());
+                    require(shapes.size() >= 2,
+                        variationLabel + " seed sweep collapsed crown morphology: unique="
+                            + shapes.size());
                 }
             }
         }
@@ -227,5 +250,8 @@ public final class TreeGenerationPipelineSelfTest {
         if (!condition) {
             throw new AssertionError(message);
         }
+    }
+
+    private record ShapeSignature(int leafCount, int height, int doubledSpan) {
     }
 }
