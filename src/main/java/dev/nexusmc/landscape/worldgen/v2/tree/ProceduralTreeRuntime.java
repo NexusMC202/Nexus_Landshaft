@@ -1,6 +1,8 @@
 package dev.nexusmc.landscape.worldgen.v2.tree;
 
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -65,8 +67,13 @@ public final class ProceduralTreeRuntime {
         if (!finalCheck.allowed()) {
             return Placement.afterLookup(false, lookup.cacheHit());
         }
-        placeModel(level, base, model, plan.species().materialProfile());
-        return Placement.afterLookup(true, lookup.cacheHit());
+        boolean placed = placeModel(
+            level,
+            base,
+            model,
+            plan.species().materialProfile()
+        );
+        return Placement.afterLookup(placed, lookup.cacheHit());
     }
 
     /** Compatibility overload for older tests and callers; resolves as spruce. */
@@ -124,8 +131,7 @@ public final class ProceduralTreeRuntime {
         if (!finalCheck.allowed()) {
             return false;
         }
-        placeModel(level, base, model, species.materialProfile());
-        return true;
+        return placeModel(level, base, model, species.materialProfile());
     }
 
     private static void requireRuntimeInputs(
@@ -202,6 +208,7 @@ public final class ProceduralTreeRuntime {
         VoxelTreeModel model
     ) {
         int probes = 0;
+        Set<VoxelTreeModel.Voxel> wood = new HashSet<>(model.wood());
         BlockPos ground = base.below();
         probes++;
         if (level.getBlockState(ground).isAir()) {
@@ -220,6 +227,9 @@ public final class ProceduralTreeRuntime {
             }
         }
         for (VoxelTreeModel.Voxel voxel : model.leaves()) {
+            if (wood.contains(voxel)) {
+                return new CheckResult(false, probes);
+            }
             BlockPos position = absolute(base, voxel);
             probes++;
             if (!withinBuildHeight(level, position)) {
@@ -261,7 +271,7 @@ public final class ProceduralTreeRuntime {
             && position.getY() < level.getMaxBuildHeight();
     }
 
-    private static void placeModel(
+    private static boolean placeModel(
         WorldGenLevel level,
         BlockPos base,
         VoxelTreeModel model,
@@ -270,6 +280,7 @@ public final class ProceduralTreeRuntime {
         TreeMaterialResolver.ResolvedMaterials resolved =
             TreeMaterialResolver.resolve(materials);
         Set<VoxelTreeModel.Voxel> wood = new HashSet<>(model.wood());
+        Map<BlockPos, BlockState> originalStates = new LinkedHashMap<>();
         for (VoxelTreeModel.Voxel voxel : model.wood()) {
             BlockState log = resolved.logBlock().defaultBlockState();
             if (log.hasProperty(RotatedPillarBlock.AXIS)) {
@@ -278,14 +289,40 @@ public final class ProceduralTreeRuntime {
                     dominantAxis(voxel, wood)
                 );
             }
-            level.setBlock(absolute(base, voxel), log, 2);
+            BlockPos position = absolute(base, voxel);
+            originalStates.putIfAbsent(
+                position.immutable(),
+                level.getBlockState(position)
+            );
+            if (!level.setBlock(position, log, 2)) {
+                rollback(level, originalStates);
+                return false;
+            }
         }
         BlockState leaves = resolved.leavesBlock().defaultBlockState();
         if (leaves.hasProperty(LeavesBlock.PERSISTENT)) {
             leaves = leaves.setValue(LeavesBlock.PERSISTENT, true);
         }
         for (VoxelTreeModel.Voxel voxel : model.leaves()) {
-            level.setBlock(absolute(base, voxel), leaves, 2);
+            BlockPos position = absolute(base, voxel);
+            originalStates.putIfAbsent(
+                position.immutable(),
+                level.getBlockState(position)
+            );
+            if (!level.setBlock(position, leaves, 2)) {
+                rollback(level, originalStates);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static void rollback(
+        WorldGenLevel level,
+        Map<BlockPos, BlockState> originalStates
+    ) {
+        for (Map.Entry<BlockPos, BlockState> entry : originalStates.entrySet()) {
+            level.setBlock(entry.getKey(), entry.getValue(), 2);
         }
     }
 
