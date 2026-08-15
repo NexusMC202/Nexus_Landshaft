@@ -103,7 +103,15 @@ public final class TreeModelFoundationSelfTest {
         ));
         expectFailure(() -> new VoxelTreeModel(
             TreeQualityTier.BASIC,
-            List.of(new VoxelTreeModel.Voxel(50, 0, 0)),
+            List.of(new VoxelTreeModel.Voxel(0, 1, 0)),
+            List.of()
+        ));
+        expectFailure(() -> new VoxelTreeModel(
+            TreeQualityTier.BASIC,
+            List.of(
+                VoxelTreeModel.ORIGIN_WOOD,
+                new VoxelTreeModel.Voxel(50, 0, 0)
+            ),
             List.of()
         ));
     }

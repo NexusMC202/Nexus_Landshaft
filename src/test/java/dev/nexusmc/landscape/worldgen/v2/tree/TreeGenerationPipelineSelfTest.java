@@ -7,7 +7,7 @@ import java.util.Set;
 public final class TreeGenerationPipelineSelfTest {
     private static final int SEED_SWEEP_COUNT = 8;
     private static final VoxelTreeModel.Voxel ORIGIN_WOOD =
-        new VoxelTreeModel.Voxel(0, 0, 0);
+        VoxelTreeModel.ORIGIN_WOOD;
 
     private TreeGenerationPipelineSelfTest() {
     }
@@ -73,6 +73,7 @@ public final class TreeGenerationPipelineSelfTest {
                     verifyGroundInteraction(label, first);
                     verifyEnvelopeContains(label, plan.envelope(), first.model());
                     verifyBudgetAndMass(label, quality, first.model());
+                    verifyDisjointModel(label, first.model());
 
                     TreeModelCache.clear();
                     TreeModelCache.Lookup lookup = TreeModelCache.getOrCreateDetailed(plan);
@@ -130,6 +131,7 @@ public final class TreeGenerationPipelineSelfTest {
                         verifyBudgetAndMass(label, quality, tree.model());
                         verifyGroundInteraction(label, tree);
                         verifyEnvelopeContains(label, plan.envelope(), tree.model());
+                        verifyDisjointModel(label, tree.model());
 
                         fingerprints.add(tree.model().fingerprint());
                         CrownShapeMetrics metrics = CrownShapeMetrics.measure(tree.model());
@@ -174,6 +176,15 @@ public final class TreeGenerationPipelineSelfTest {
         require(model.leaves().size() <= budget.maxLeafBlocks(),
             label + " exceeded foliage budget: " + model.leaves().size()
                 + " > " + budget.maxLeafBlocks());
+    }
+
+    private static void verifyDisjointModel(
+        String label,
+        VoxelTreeModel model
+    ) {
+        Set<VoxelTreeModel.Voxel> wood = new HashSet<>(model.wood());
+        require(model.leaves().stream().noneMatch(wood::contains),
+            label + " foliage overlaps structural wood");
     }
 
     private static void verifyGroundInteraction(

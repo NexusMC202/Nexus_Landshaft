@@ -11,6 +11,7 @@ public record VoxelTreeModel(
     List<Voxel> leaves
 ) {
     public static final int MIN_ROOT_Y = -2;
+    public static final Voxel ORIGIN_WOOD = new Voxel(0, 0, 0);
 
     public VoxelTreeModel {
         if (quality == null) {
@@ -20,6 +21,9 @@ public record VoxelTreeModel(
         leaves = List.copyOf(leaves);
         if (wood.isEmpty()) {
             throw new IllegalArgumentException("tree has no wood");
+        }
+        if (!wood.contains(ORIGIN_WOOD)) {
+            throw new IllegalArgumentException("tree has no trunk origin");
         }
         validate(quality.budget(), wood, leaves);
     }
