@@ -57,8 +57,8 @@ public final class TreeRuntimeOutcomeSelfTest {
                 false
             );
         require(collision.cacheMiss(), "collision lookup miss not recognized");
-        require(collision.shouldFallback(),
-            "collision must retain legacy fallback behavior");
+        require(!collision.shouldFallback(),
+            "V2 collision must be an authoritative placement rejection");
 
         ProceduralTreeIntegration.Outcome disabled =
             ProceduralTreeIntegration.Outcome.withoutLookup(
@@ -68,6 +68,26 @@ public final class TreeRuntimeOutcomeSelfTest {
             );
         require(disabled.shouldFallback(),
             "disabled V2 path must retain legacy fallback");
+
+        ProceduralTreeIntegration.Outcome unsupported =
+            ProceduralTreeIntegration.Outcome.withoutLookup(
+                ProceduralTreeIntegration.Result.UNSUPPORTED,
+                null,
+                0L
+            );
+        require(unsupported.shouldFallback(),
+            "unsupported shapes must retain legacy fallback");
+
+        ProceduralTreeIntegration.Outcome placed =
+            new ProceduralTreeIntegration.Outcome(
+                ProceduralTreeIntegration.Result.PLACED,
+                TreeQualityTier.BASIC,
+                13L,
+                true,
+                true
+            );
+        require(!placed.shouldFallback(),
+            "placed V2 tree must never invoke legacy fallback");
     }
 
     private static void verifyTelemetryClassifiesLookupStates() {
