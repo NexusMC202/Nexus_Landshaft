@@ -52,10 +52,16 @@ public record TreePlacementEnvelope(
             * (1.0 - environment.forestCompetition() * 0.12);
         int radius = (int)Math.ceil(baseRadius * radiusScale);
         radius += WindDeformationPlan.conservativeExtraRadius(quality, environment);
-        // Branch estimates describe the skeleton. Rasterization plus canopy clusters
-        // can occupy up to two additional horizontal voxels on uncommon seeds, so
-        // reserve that margin here instead of deferring the miss to the final check.
-        radius += 2;
+
+        // The analytical radius follows branch reach, while rasterization and canopy
+        // clusters occupy additional voxels around that skeleton. HERO crowns use the
+        // widest clusters, so reserve one more voxel there instead of relying on a
+        // seed-specific constant discovered by the final placement pass.
+        int canopyMargin = switch (quality) {
+            case BASIC, MID -> 2;
+            case HERO -> 3;
+        };
+        radius += canopyMargin;
         radius = Math.max(2, Math.min(radius, quality.budget().maxHorizontalRadius()));
 
         int underground = quality == TreeQualityTier.BASIC ? 1 : 2;
