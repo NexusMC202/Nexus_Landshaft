@@ -51,6 +51,7 @@ public final class CrownWindResponseExport {
             GSON.toJson(export)
         );
         CrownWindDeltaExport.main(new String[]{output.toString()});
+        CrownWindDirectionExport.main(new String[]{output.toString()});
         CrownShapeMetricsSelfTest.main(new String[0]);
         CrownShapeSummaryExport.main(new String[]{output.toString()});
         System.out.println(
