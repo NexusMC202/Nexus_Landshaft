@@ -36,6 +36,7 @@ public final class RegionalLandmarkFeature extends Feature<NoneFeatureConfigurat
         int y = level.getHeight(Heightmap.Types.WORLD_SURFACE_WG, x, z);
         BlockPos surface = new BlockPos(x, y, z);
         if (!level.getFluidState(surface).isEmpty()
+            || !level.getFluidState(surface.below()).isEmpty()
             || level.getBlockState(surface.below()).isAir()) {
             return false;
         }
