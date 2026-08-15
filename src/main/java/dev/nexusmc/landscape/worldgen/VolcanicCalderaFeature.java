@@ -34,15 +34,14 @@ public final class VolcanicCalderaFeature extends Feature<NoneFeatureConfigurati
         if (!level.getFluidState(origin).isEmpty()
             || level.getBlockState(origin.below()).isAir()
             || origin.getY() <= level.getMinBuildHeight() + 4
-            || origin.getY() > level.getMaxBuildHeight() - 32) {
+            || origin.getY() > level.getMaxBuildHeight() - 48) {
             return false;
         }
 
-        // Centering the feature in its placement chunk and keeping it below
-        // 13 blocks guarantees it touches at most the immediately adjacent
-        // chunks, which is safe during the FEATURES generation step.
-        int radius = 10 + random.nextInt(3);
-        int height = 11 + random.nextInt(5);
+        // The footprint remains inside the immediately adjacent chunks while
+        // the stronger vertical profile reads as a volcano, not a lava rock.
+        int radius = 14 + random.nextInt(3);
+        int height = 24 + random.nextInt(9);
         int baseY = origin.getY() - 1;
         buildCone(level, origin, baseY, radius, height, random);
         carveCrater(level, origin, baseY, radius, height, random);
@@ -74,9 +73,15 @@ public final class VolcanicCalderaFeature extends Feature<NoneFeatureConfigurati
                 double rim = distance > 0.2 && distance < 0.42 ? 3.0 : 0.0;
                 int topY = Math.max(naturalY,
                     baseY + Mth.floor((1.0 - distance) * height + rim + random.nextInt(2)));
-                for (int y = naturalY; y <= topY; y++) {
+                for (int y = naturalY - 4; y <= topY; y++) {
                     cursor.set(origin.getX() + x, y, origin.getZ() + z);
-                    level.setBlock(cursor, volcanicStone(random, y == topY), 2);
+                    level.setBlock(
+                        cursor,
+                        y <= naturalY + 2
+                            ? Blocks.BLACKSTONE.defaultBlockState()
+                            : volcanicStone(random, y == topY),
+                        2
+                    );
                 }
             }
         }
