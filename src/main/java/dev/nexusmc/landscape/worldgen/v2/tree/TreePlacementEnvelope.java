@@ -40,6 +40,10 @@ public record TreePlacementEnvelope(
             * (1.0 - environment.slope() * 0.08)
             * (oldGrowth ? 1.08 : 1.0);
         int height = (int)Math.ceil(baseHeight * heightScale);
+        if (species != ConiferSpeciesProfile.SPRUCE
+            && species != ConiferSpeciesProfile.PINE) {
+            height++;
+        }
         height = Math.min(height, quality.budget().maxHeight());
 
         double baseRadius = switch (quality) {
@@ -61,6 +65,10 @@ public record TreePlacementEnvelope(
             case BASIC, MID -> 2;
             case HERO -> 3;
         };
+        if (species != ConiferSpeciesProfile.SPRUCE
+            && species != ConiferSpeciesProfile.PINE) {
+            canopyMargin += 3;
+        }
         if (species.branchLengthMultiplier() >= 1.25) {
             canopyMargin++;
         }

@@ -29,7 +29,7 @@ public enum ConiferSpeciesProfile {
         1.18
     ),
     OAK(TreeMaterialProfile.OAK, 0.92, -0.18, 1.12, 1.08, 1.08, 1.10, 0.92),
-    BIRCH(TreeMaterialProfile.BIRCH, 1.08, 0.12, 0.78, 0.72, 0.86, 0.72, 1.08),
+    BIRCH(TreeMaterialProfile.BIRCH, 1.08, 0.12, 0.78, 0.72, 0.86, 0.90, 1.08),
     DARK_OAK(TreeMaterialProfile.DARK_OAK, 0.88, -0.22, 1.28, 1.16, 1.18, 1.28, 0.88),
     JUNGLE(TreeMaterialProfile.JUNGLE, 1.34, 0.28, 1.18, 0.72, 1.12, 1.18, 1.24),
     ACACIA(TreeMaterialProfile.ACACIA, 0.86, 0.18, 1.36, 0.58, 0.72, 0.86, 1.34),
