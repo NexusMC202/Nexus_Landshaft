@@ -176,8 +176,13 @@ public final class ProceduralTreeIntegration {
         DISABLED,
         UNSUPPORTED;
 
+        /**
+         * Legacy generation is only a compatibility path. A V2 collision is an
+         * authoritative placement rejection and must not be bypassed by the older
+         * generator, whose crown placement is intentionally less strict.
+         */
         public boolean shouldFallback() {
-            return this != PLACED && this != QUOTA_REJECTED;
+            return this == DISABLED || this == UNSUPPORTED;
         }
     }
 }
