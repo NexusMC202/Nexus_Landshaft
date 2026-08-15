@@ -45,7 +45,7 @@ public record TreePlacementEnvelope(
         double baseRadius = switch (quality) {
             case BASIC -> 3.0;
             case MID -> 5.0;
-            case HERO -> 8.0;
+            case HERO -> 9.0;
         };
         double radiusScale = species.branchLengthMultiplier()
             * (0.88 + environment.openSpaceStrength() * 0.24)
