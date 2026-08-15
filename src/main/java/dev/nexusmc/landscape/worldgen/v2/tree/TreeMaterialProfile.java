@@ -12,6 +12,27 @@ public record TreeMaterialProfile(
         "minecraft:spruce_log",
         "minecraft:spruce_leaves"
     );
+    public static final TreeMaterialProfile OAK = new TreeMaterialProfile(
+        "minecraft:oak_log", "minecraft:oak_leaves"
+    );
+    public static final TreeMaterialProfile BIRCH = new TreeMaterialProfile(
+        "minecraft:birch_log", "minecraft:birch_leaves"
+    );
+    public static final TreeMaterialProfile DARK_OAK = new TreeMaterialProfile(
+        "minecraft:dark_oak_log", "minecraft:dark_oak_leaves"
+    );
+    public static final TreeMaterialProfile JUNGLE = new TreeMaterialProfile(
+        "minecraft:jungle_log", "minecraft:jungle_leaves"
+    );
+    public static final TreeMaterialProfile ACACIA = new TreeMaterialProfile(
+        "minecraft:acacia_log", "minecraft:acacia_leaves"
+    );
+    public static final TreeMaterialProfile CHERRY = new TreeMaterialProfile(
+        "minecraft:cherry_log", "minecraft:cherry_leaves"
+    );
+    public static final TreeMaterialProfile MANGROVE = new TreeMaterialProfile(
+        "minecraft:mangrove_log", "minecraft:mangrove_leaves"
+    );
 
     public TreeMaterialProfile {
         logBlockId = requireBlockId(logBlockId, "logBlockId");

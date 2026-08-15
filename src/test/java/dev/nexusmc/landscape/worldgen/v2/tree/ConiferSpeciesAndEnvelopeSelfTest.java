@@ -32,8 +32,11 @@ public final class ConiferSpeciesAndEnvelopeSelfTest {
             ) == ConiferSpeciesProfile.PINE,
             "pine mapping mismatch"
         );
-        expectFailure(() -> ConiferSpeciesProfile.fromShape(
+        require(ConiferSpeciesProfile.fromShape(
             VegetationProfile.TreeShape.OAK_ROUNDED
+        ) == ConiferSpeciesProfile.OAK, "oak mapping mismatch");
+        expectFailure(() -> ConiferSpeciesProfile.fromShape(
+            VegetationProfile.TreeShape.GIANT_MUSHROOM
         ));
     }
 

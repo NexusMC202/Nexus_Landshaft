@@ -27,6 +27,14 @@ public enum ConiferSpeciesProfile {
         0.78,
         1.06,
         1.18
+    ),
+    OAK(TreeMaterialProfile.OAK, 0.92, -0.18, 1.12, 1.08, 1.08, 1.10, 0.92),
+    BIRCH(TreeMaterialProfile.BIRCH, 1.08, 0.12, 0.78, 0.72, 0.86, 0.72, 1.08),
+    DARK_OAK(TreeMaterialProfile.DARK_OAK, 0.88, -0.22, 1.28, 1.16, 1.18, 1.28, 0.88),
+    JUNGLE(TreeMaterialProfile.JUNGLE, 1.34, 0.28, 1.18, 0.72, 1.12, 1.18, 1.24),
+    ACACIA(TreeMaterialProfile.ACACIA, 0.86, 0.18, 1.36, 0.58, 0.72, 0.86, 1.34),
+    CHERRY(TreeMaterialProfile.CHERRY, 0.90, -0.04, 1.22, 0.84, 1.20, 0.88, 1.10),
+    MANGROVE(TreeMaterialProfile.MANGROVE, 0.94, -0.16, 1.16, 1.12, 1.14, 1.14, 0.96
     );
 
     private final TreeMaterialProfile materialProfile;
@@ -74,13 +82,20 @@ public enum ConiferSpeciesProfile {
     public static ConiferSpeciesProfile fromShape(
         VegetationProfile.TreeShape shape
     ) {
-        if (shape == VegetationProfile.TreeShape.SPRUCE_CONICAL) {
-            return SPRUCE;
-        }
-        if (shape == VegetationProfile.TreeShape.PINE_TALL) {
-            return PINE;
-        }
-        throw new IllegalArgumentException("unsupported conifer shape: " + shape);
+        return switch (shape) {
+            case SPRUCE_CONICAL -> SPRUCE;
+            case PINE_TALL -> PINE;
+            case OAK_ROUNDED -> OAK;
+            case BIRCH_COLUMN -> BIRCH;
+            case DARK_OAK_BROAD -> DARK_OAK;
+            case JUNGLE_EMERGENT -> JUNGLE;
+            case ACACIA_FLAT -> ACACIA;
+            case CHERRY_TERRACE -> CHERRY;
+            case MANGROVE_ROOTED -> MANGROVE;
+            case GIANT_MUSHROOM -> throw new IllegalArgumentException(
+                "unsupported procedural tree shape: " + shape
+            );
+        };
     }
 
     public TreeMaterialProfile materialProfile() {

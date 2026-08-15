@@ -200,9 +200,18 @@ public final class TreeModelFoundationSelfTest {
         require(ProceduralTreePolicy.supports(
             VegetationProfile.TreeShape.PINE_TALL
         ), "pine must use Tree System v2");
-        require(!ProceduralTreePolicy.supports(
+        require(ProceduralTreePolicy.supports(
             VegetationProfile.TreeShape.OAK_ROUNDED
-        ), "oak rollout is premature");
+        ), "oak must use Tree System v2");
+        require(ProceduralTreePolicy.supports(
+            VegetationProfile.TreeShape.BIRCH_COLUMN
+        ), "birch must use Tree System v2");
+        require(ProceduralTreePolicy.supports(
+            VegetationProfile.TreeShape.JUNGLE_EMERGENT
+        ), "jungle must use Tree System v2");
+        require(!ProceduralTreePolicy.supports(
+            VegetationProfile.TreeShape.GIANT_MUSHROOM
+        ), "giant mushroom is not a procedural tree");
 
         TreeEnvironment basic = ProceduralTreePolicy.environment(
             0.08, 0.45, 0.72, 0.06,

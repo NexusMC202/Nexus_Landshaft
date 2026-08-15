@@ -12,8 +12,8 @@ public final class ProceduralTreePolicy {
     }
 
     public static boolean supports(VegetationProfile.TreeShape shape) {
-        return shape == VegetationProfile.TreeShape.SPRUCE_CONICAL
-            || shape == VegetationProfile.TreeShape.PINE_TALL;
+        return shape != null
+            && shape != VegetationProfile.TreeShape.GIANT_MUSHROOM;
     }
 
     public static TreeQualityTier quality(
