@@ -10,9 +10,10 @@ public final class Stage6CommandPolicySelfTest {
         require(Stage6CommandPolicy.canUse(2), "level 2 denied access");
         require(Stage6CommandPolicy.canUse(4), "level 4 denied access");
         require(Stage6CommandPolicy.DEBUG_SUBCOMMANDS.equals(java.util.Set.of(
-            "position", "chunk", "counters", "reset", "export"
+            "position", "inspect", "chunk", "counters", "profiler", "reset",
+            "export"
         )), "debug command inventory differs");
-        System.out.println("Stage6CommandPolicySelfTest: PASS commands=5 permission=2");
+        System.out.println("Stage6CommandPolicySelfTest: PASS commands=7 permission=2");
     }
 
     private static void require(boolean condition, String message) {

@@ -18,9 +18,13 @@ import dev.nexusmc.landscape.worldgen.v2.surface.SurfaceProfile;
 import dev.nexusmc.landscape.worldgen.v2.surface.SurfaceProfileCatalog;
 import dev.nexusmc.landscape.worldgen.v2.surface.SurfaceProfileResolver;
 import dev.nexusmc.landscape.worldgen.v2.surface.SurfaceProvincePass;
+import dev.nexusmc.landscape.worldgen.v2.surface.SurfaceNoise;
+import dev.nexusmc.landscape.worldgen.v2.vegetation.VegetationContext;
 import dev.nexusmc.landscape.worldgen.v2.vegetation.VegetationProfile;
 import dev.nexusmc.landscape.worldgen.v2.vegetation.VegetationProfileCatalog;
 import dev.nexusmc.landscape.worldgen.v2.vegetation.VegetationProvincePass;
+import dev.nexusmc.landscape.worldgen.v2.vegetation.VegetationResolver;
+import dev.nexusmc.landscape.worldgen.v2.vegetation.VegetationSelection;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -62,10 +66,18 @@ public final class Stage6Command {
             .then(literal("debug")
                 .then(literal("position")
                     .executes(context -> debugPosition(context.getSource())))
+                .then(literal("inspect")
+                    .executes(context -> debugPosition(context.getSource())))
                 .then(literal("chunk")
                     .executes(context -> debugChunk(context.getSource())))
                 .then(literal("counters")
                     .executes(context -> debugCounters(context.getSource())))
+                .then(literal("profiler")
+                    .executes(context -> debugProfiler(context.getSource()))
+                    .then(literal("reset")
+                        .executes(context -> debugProfilerReset(
+                            context.getSource()
+                        ))))
                 .then(literal("reset")
                     .executes(context -> debugReset(context.getSource())))
                 .then(literal("export")
@@ -92,10 +104,15 @@ public final class Stage6Command {
         String mapping = mappingStatus(value.biomeKey());
         sendLines(source,
             "Nexus Stage 6 position",
-            "dimension=" + source.getLevel().dimension().location()
+            "seed=" + source.getLevel().getSeed()
+                + " dimension=" + source.getLevel().dimension().location()
                 + " block=" + value.blockX() + ',' + sourceY(source) + ',' + value.blockZ()
                 + " chunk=" + Math.floorDiv(value.blockX(), 16) + ',' + Math.floorDiv(value.blockZ(), 16),
-            "biome=" + value.biomeKey() + " terrain_region=" + value.terrainProvince(),
+            "biome=" + value.biomeKey()
+                + " climate_family=" + sample.surfaceProfile().climate().name().toLowerCase(Locale.ROOT)
+                + " terrain_region=" + value.terrainProvince(),
+            "regional_province=" + sample.regional().dominantProvince().name().toLowerCase(Locale.ROOT)
+                + " regional_mood=" + sample.regional().dominantMood().name().toLowerCase(Locale.ROOT),
             "surface_profile=" + sample.surfaceProfile().profileId()
                 + " vegetation_profile=" + sample.vegetationProfile().profileId()
                 + " cave_profile=" + cave,
@@ -103,8 +120,17 @@ public final class Stage6Command {
                 + " natures_spirit=" + mapping,
             formatInfluences(value),
             String.format(Locale.ROOT,
-                "slope=%.4f normalized_height=%.4f temperature=%.4f humidity=%.4f",
-                value.slope(), value.normalizedHeight(), value.temperature(), value.humidity())
+                "slope=%.4f normalized_height=%.4f temperature=%.4f humidity=%.4f groundwater=%.4f",
+                value.slope(), value.normalizedHeight(), value.temperature(),
+                value.humidity(), value.groundwater()),
+            String.format(Locale.ROOT,
+                "forest_core=%.4f clearing=%.4f trees_allowed=%s tree_density=%.4f old_growth_density=%.4f tree_line_y=%d",
+                sample.vegetationContext().forestCore(),
+                sample.vegetationContext().clearingNoise(),
+                sample.vegetationSelection().treesAllowed(),
+                sample.vegetationSelection().treeDensity(),
+                sample.vegetationSelection().oldGrowthDensity(),
+                sample.vegetationProfile().treeLineY())
         );
         return 1;
     }
@@ -149,6 +175,30 @@ public final class Stage6Command {
         return 1;
     }
 
+    private static int debugProfiler(CommandSourceStack source) {
+        if (!Stage6Profiler.enabled()) {
+            source.sendFailure(Component.literal(
+                "Nexus Stage 6 profiler is disabled. Set "
+                    + "NEXUS_LANDSCAPE_PROFILE=1 before launch."
+            ));
+            return 0;
+        }
+        sendLines(source, "Nexus Stage 6 profiler snapshot");
+        sendLines(source, profilerSummary(Stage6Profiler.snapshot()));
+        return 1;
+    }
+
+    private static int debugProfilerReset(CommandSourceStack source) {
+        Stage6Profiler.reset();
+        source.sendSuccess(() -> Component.literal(
+            Stage6Profiler.enabled()
+                ? "Nexus Stage 6 profiler reset."
+                : "Nexus Stage 6 profiler is disabled; counters are clear. "
+                    + "Set NEXUS_LANDSCAPE_PROFILE=1 before launch."
+        ), false);
+        return Stage6Profiler.enabled() ? 1 : 0;
+    }
+
     private static int debugExport(CommandSourceStack source) {
         ServerLevel level = source.getLevel();
         AuditSample sample = sampleAtSource(source);
@@ -167,11 +217,22 @@ public final class Stage6Command {
         report.put("chunk", Map.of("x", Math.floorDiv(value.blockX(), 16), "z", Math.floorDiv(value.blockZ(), 16)));
         report.put("biome", value.biomeKey());
         report.put("terrain_region", value.terrainProvince());
+        report.put("regional_province",
+            sample.regional().dominantProvince().name().toLowerCase(Locale.ROOT));
+        report.put("regional_mood",
+            sample.regional().dominantMood().name().toLowerCase(Locale.ROOT));
         report.put("surface_profile", sample.surfaceProfile().profileId());
         report.put("vegetation_profile", sample.vegetationProfile().profileId());
         report.put("cave_profile", caveProfile(level, source));
         report.put("dominant_zone", sample.zone());
         report.put("influences", influenceMap(value));
+        report.put("forest_core", sample.vegetationContext().forestCore());
+        report.put("clearing_noise", sample.vegetationContext().clearingNoise());
+        report.put("trees_allowed", sample.vegetationSelection().treesAllowed());
+        report.put("tree_density", sample.vegetationSelection().treeDensity());
+        report.put("old_growth_density",
+            sample.vegetationSelection().oldGrowthDensity());
+        report.put("tree_line_y", sample.vegetationProfile().treeLineY());
         report.put("fallback", fallbackStatus(value.biomeKey()));
         report.put("natures_spirit_mapping", mappingStatus(value.biomeKey()));
         report.put("loaded_optional_integrations", loadedIntegrations());
@@ -391,6 +452,23 @@ public final class Stage6Command {
         return counters.replace('\n', ' ').trim();
     }
 
+    private static String[] profilerSummary(String counters) {
+        Map<String, Object> values = parseCounters(counters);
+        String[] lines = new String[Stage6Profiler.Phase.values().length];
+        int index = 0;
+        for (Stage6Profiler.Phase phase : Stage6Profiler.Phase.values()) {
+            String key = "profile."
+                + phase.name().toLowerCase(Locale.ROOT) + '.';
+            lines[index++] = phase.name().toLowerCase(Locale.ROOT)
+                + " calls=" + values.get(key + "calls")
+                + " total_ms=" + values.get(key + "total_ms")
+                + " avg_ms=" + values.get(key + "average_ms")
+                + " p95_ms=" + values.get(key + "p95_ms")
+                + " max_ms=" + values.get(key + "maximum_ms");
+        }
+        return lines;
+    }
+
     private static String modVersion(String modId) {
         return ModList.get().getModContainerById(modId)
             .map(container -> container.getModInfo().getVersion().toString())
@@ -475,12 +553,26 @@ public final class Stage6Command {
                     .orElseGet(() -> VegetationProfileCatalog.fallback(
                         input.temperature(), input.humidity(), false
                     ));
+            net.minecraft.core.BlockPos surfacePosition =
+                new net.minecraft.core.BlockPos(x, y, z);
+            boolean water = !level.getFluidState(surfacePosition).isEmpty()
+                || !level.getFluidState(surfacePosition.above()).isEmpty();
+            VegetationContext vegetationContext = new VegetationContext(
+                context,
+                SurfaceNoise.value(level.getSeed(), x, z, 176, 0xF0AE57L),
+                SurfaceNoise.value(level.getSeed(), x, z, 104, 0xC1EA41L),
+                false,
+                water
+            );
             return new AuditSample(
                 context,
                 surface,
                 SurfaceProfileResolver.resolve(surface, context).zone()
                     .name().toLowerCase(Locale.ROOT),
-                vegetation
+                vegetation,
+                regional,
+                vegetationContext,
+                VegetationResolver.resolve(vegetation, vegetationContext)
             );
         }
     }
@@ -489,7 +581,10 @@ public final class Stage6Command {
         SurfaceContext context,
         SurfaceProfile surfaceProfile,
         String zone,
-        VegetationProfile vegetationProfile
+        VegetationProfile vegetationProfile,
+        RegionalFieldMath.Sample regional,
+        VegetationContext vegetationContext,
+        VegetationSelection vegetationSelection
     ) {
     }
 }
