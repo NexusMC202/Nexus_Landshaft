@@ -177,10 +177,10 @@ public final class HumidKarstArchFeature extends Feature<NoneFeatureConfiguratio
     }
 
     private static BlockState limestone(RandomSource random) {
-        return random.nextInt(7) == 0
-            ? Blocks.CALCITE.defaultBlockState()
-            : random.nextInt(5) == 0
-                ? Blocks.MOSSY_COBBLESTONE.defaultBlockState()
+        return random.nextInt(5) == 0
+            ? Blocks.MOSSY_COBBLESTONE.defaultBlockState()
+            : random.nextInt(4) == 0
+                ? Blocks.ANDESITE.defaultBlockState()
                 : Blocks.STONE.defaultBlockState();
     }
 }

@@ -6,7 +6,8 @@ import java.util.Set;
 public final class Stage6CommandPolicy {
     public static final int REQUIRED_PERMISSION_LEVEL = 2;
     public static final Set<String> DEBUG_SUBCOMMANDS = Set.of(
-        "position", "chunk", "counters", "reset", "export"
+        "position", "inspect", "chunk", "counters", "profiler", "reset",
+        "export"
     );
 
     private Stage6CommandPolicy() {

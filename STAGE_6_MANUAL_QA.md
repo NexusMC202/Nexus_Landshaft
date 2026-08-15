@@ -1,5 +1,9 @@
 # Nexus Landscape — Stage 6 manual QA
 
+For the current five-seed, long-distance and profiler workflow, use
+[`LIVE_QA_MULTI_SEED.md`](LIVE_QA_MULTI_SEED.md). The targeted coordinates
+below remain the regression scene catalog.
+
 Статус: **PARTIAL** до получения и проверки пользовательских screenshots.
 Stage 7 не входит в этот документ.
 
@@ -7,8 +11,10 @@ Stage 7 не входит в этот документ.
 
 1. Установить Minecraft `1.21.1`, NeoForge `21.1.235` или более новый
    совместимый `21.1.x`, Java 21.
-2. Удалить старый Nexus Landscape JAR из `<instance>/mods`, затем положить туда
-   `nexus_landscape-0.8.0.jar`. Одновременно две версии мода не держать.
+2. Выполнить `.\gradlew.bat clean build`, удалить старый Nexus Landscape JAR
+   из `<instance>/mods`, затем положить туда
+   `build/libs/nexus_landscape-0.8.0-alpha.1.jar`. Sources/javadoc JAR не
+   устанавливать. Одновременно две версии мода не держать.
 3. Обязательных сторонних модов нет. Tectonic, TerraBlender и внешний worldgen
    datapack для обычного запуска не нужны; данные Nexus V2 находятся внутри JAR.
 4. Nature’s Spirit необязателен. Проверенная связка: Nature’s Spirit

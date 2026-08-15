@@ -8,12 +8,14 @@ import dev.nexusmc.landscape.worldgen.v2.hydrology.NexusV2HydrologySampler;
 import dev.nexusmc.landscape.worldgen.v2.surface.SurfaceContext;
 import dev.nexusmc.landscape.worldgen.v2.surface.SurfaceContextFactory;
 import dev.nexusmc.landscape.worldgen.v2.surface.SurfaceNoise;
+import dev.nexusmc.landscape.worldgen.v2.tree.ProceduralTreeIntegration;
+import dev.nexusmc.landscape.worldgen.v2.tree.TreeQualityTier;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Collections;
 import java.util.WeakHashMap;
-import java.util.concurrent.atomic.LongAdder;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.LongAdder;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -58,8 +60,10 @@ public final class VegetationProvincePass {
 
         for (int localZ = 1; localZ < 16; localZ += 4) {
             for (int localX = 1; localX < 16; localX += 4) {
-                int worldX = minX + localX + jitter(seed, minX + localX, minZ + localZ, 11L);
-                int worldZ = minZ + localZ + jitter(seed, minX + localX, minZ + localZ, 17L);
+                int worldX = minX + localX
+                    + jitter(seed, minX + localX, minZ + localZ, 11L);
+                int worldZ = minZ + localZ
+                    + jitter(seed, minX + localX, minZ + localZ, 17L);
                 decorateGround(
                     level,
                     fields,
@@ -90,24 +94,49 @@ public final class VegetationProvincePass {
     private static String snapshot(RandomState randomState, boolean reset) {
         Telemetry telemetry = telemetry(randomState);
         return "vegetation.chunks=" + value(telemetry.chunks, reset) + '\n'
-            + "vegetation.ground_attempts=" + value(telemetry.groundAttempts, reset) + '\n'
+            + "vegetation.ground_attempts="
+            + value(telemetry.groundAttempts, reset) + '\n'
             + "vegetation.ground_placed=" + value(telemetry.ground, reset) + '\n'
             + "vegetation.rock_blocks=" + value(telemetry.rocks, reset) + '\n'
-            + "vegetation.tree_attempts=" + value(telemetry.treeAttempts, reset) + '\n'
+            + "vegetation.tree_attempts="
+            + value(telemetry.treeAttempts, reset) + '\n'
             + "vegetation.tree_placed=" + value(telemetry.trees, reset) + '\n'
-            + "vegetation.tree_rejected_slope=" + value(telemetry.treeRejectedSlope, reset) + '\n'
-            + "vegetation.tree_rejected_water=" + value(telemetry.treeRejectedWater, reset) + '\n'
-            + "vegetation.tree_rejected_river=" + value(telemetry.treeRejectedRiver, reset) + '\n'
-            + "vegetation.tree_rejected_altitude=" + value(telemetry.treeRejectedAltitude, reset) + '\n'
-            + "vegetation.tree_rejected_density=" + value(telemetry.treeRejectedDensity, reset) + '\n'
-            + "vegetation.tree_rejected_other=" + value(telemetry.treeRejectedOther, reset) + '\n'
+            + "vegetation.tree_rejected_slope="
+            + value(telemetry.treeRejectedSlope, reset) + '\n'
+            + "vegetation.tree_rejected_water="
+            + value(telemetry.treeRejectedWater, reset) + '\n'
+            + "vegetation.tree_rejected_river="
+            + value(telemetry.treeRejectedRiver, reset) + '\n'
+            + "vegetation.tree_rejected_altitude="
+            + value(telemetry.treeRejectedAltitude, reset) + '\n'
+            + "vegetation.tree_rejected_density="
+            + value(telemetry.treeRejectedDensity, reset) + '\n'
+            + "vegetation.tree_rejected_other="
+            + value(telemetry.treeRejectedOther, reset) + '\n'
+            + "vegetation.tree_v2_attempts="
+            + value(telemetry.treeV2Attempts, reset) + '\n'
+            + "vegetation.tree_v2_placed="
+            + value(telemetry.treeV2Placed, reset) + '\n'
+            + "vegetation.tree_v2_collisions="
+            + value(telemetry.treeV2Collisions, reset) + '\n'
+            + "vegetation.tree_v2_quota_rejected="
+            + value(telemetry.treeV2QuotaRejected, reset) + '\n'
+            + "vegetation.tree_v2_disabled="
+            + value(telemetry.treeV2Disabled, reset) + '\n'
+            + "vegetation.tree_v2_fallback="
+            + value(telemetry.treeV2Fallback, reset) + '\n'
+            + treeQualitySnapshot(telemetry, reset)
             + provinceSnapshot(telemetry, reset)
-            + "cave.columns_or_sections_processed=" + value(telemetry.caveColumns, reset) + '\n'
+            + "cave.columns_or_sections_processed="
+            + value(telemetry.caveColumns, reset) + '\n'
             + "cave.blocks_changed=" + value(telemetry.caves, reset) + '\n'
             + "cave.profile.lush=" + value(telemetry.caveLush, reset) + '\n'
-            + "cave.profile.dripstone=" + value(telemetry.caveDripstone, reset) + '\n'
-            + "cave.profile.deep_dark=" + value(telemetry.caveDeepDark, reset) + '\n'
-            + "cave.profile.generic=" + value(telemetry.caveGeneric, reset) + '\n'
+            + "cave.profile.dripstone="
+            + value(telemetry.caveDripstone, reset) + '\n'
+            + "cave.profile.deep_dark="
+            + value(telemetry.caveDeepDark, reset) + '\n'
+            + "cave.profile.generic="
+            + value(telemetry.caveGeneric, reset) + '\n'
             + cavePositions(telemetry, reset);
     }
 
@@ -133,6 +162,24 @@ public final class VegetationProvincePass {
             output.append("cave.profile.").append(names[index])
                 .append(".first=")
                 .append(position(telemetry.firstCaves[index], reset))
+                .append('\n');
+        }
+        return output.toString();
+    }
+
+    private static String treeQualitySnapshot(
+        Telemetry telemetry,
+        boolean reset
+    ) {
+        StringBuilder output = new StringBuilder();
+        for (TreeQualityTier quality : TreeQualityTier.values()) {
+            output.append("vegetation.tree_v2.quality.")
+                .append(quality.name().toLowerCase(java.util.Locale.ROOT))
+                .append('=')
+                .append(value(
+                    telemetry.treeV2Quality[quality.ordinal()],
+                    reset
+                ))
                 .append('\n');
         }
         return output.toString();
@@ -208,10 +255,15 @@ public final class VegetationProvincePass {
         for (int cellZ = cellMinZ; cellZ <= cellMaxZ; cellZ++) {
             for (int cellX = cellMinX; cellX <= cellMaxX; cellX++) {
                 int x = cellX * 14 + 3
-                    + (int)Math.floor(unit(seed, cellX, cellZ, 0x71EEL) * 8.0);
+                    + (int)Math.floor(
+                        unit(seed, cellX, cellZ, 0x71EEL) * 8.0
+                    );
                 int z = cellZ * 14 + 3
-                    + (int)Math.floor(unit(seed, cellX, cellZ, 0x71EFL) * 8.0);
-                if (x < minX || x > minX + 15 || z < minZ || z > minZ + 15) {
+                    + (int)Math.floor(
+                        unit(seed, cellX, cellZ, 0x71EFL) * 8.0
+                    );
+                if (x < minX || x > minX + 15
+                    || z < minZ || z > minZ + 15) {
                     continue;
                 }
                 telemetry.treeAttempts.increment();
@@ -234,21 +286,97 @@ public final class VegetationProvincePass {
                         SurfaceNoise.hash(seed, x, z, 0x5A9EL),
                         sample.profile().treeShapes().size()
                     ));
-                long placementStarted = Stage6Profiler.start();
-                boolean placed = buildTree(
-                    level,
-                    new BlockPos(x, sample.surfaceY() + 1, z),
-                    shape,
-                    unit(seed, x, z, 0x01D6L)
-                        < sample.selection().oldGrowthDensity()
+                boolean oldGrowth = unit(seed, x, z, 0x01D6L)
+                    < sample.selection().oldGrowthDensity();
+                BlockPos base = new BlockPos(x, sample.surfaceY() + 1, z);
+                SurfaceContext surface = sample.context().surface();
+                double soilMoisture = Math.max(
+                    surface.groundwater(),
+                    surface.wetBank() ? 0.85 : 0.0
                 );
+                double riverInfluence = Math.max(
+                    surface.riverMask(),
+                    surface.riverInfluence()
+                );
+                double windStrength = Math.min(
+                    1.0,
+                    0.15 + surface.slope() * 0.62
+                        + Math.max(0.0, (surface.surfaceY() - 96.0) / 180.0)
+                );
+                double windAngle = unit(seed, x, z, 0x7AEE2L)
+                    * Math.PI * 2.0;
+                double openStrength = Math.max(
+                    0.08,
+                    1.0 - sample.context().forestCore()
+                );
+                double openAngle = unit(seed, x, z, 0x7AEE3L)
+                    * Math.PI * 2.0;
+
+                long placementStarted = Stage6Profiler.start();
+                ProceduralTreeIntegration.Outcome outcome =
+                    ProceduralTreeIntegration.tryPlaceDetailed(
+                        level,
+                        base,
+                        seed,
+                        shape,
+                        oldGrowth,
+                        sample.selection().oldGrowthDensity(),
+                        surface.slope(),
+                        soilMoisture,
+                        sample.context().forestCore(),
+                        riverInfluence,
+                        Math.cos(windAngle) * windStrength,
+                        Math.sin(windAngle) * windStrength,
+                        Math.cos(openAngle) * openStrength,
+                        Math.sin(openAngle) * openStrength
+                    );
+
+                boolean intentionallySkipped = outcome.result()
+                    == ProceduralTreeIntegration.Result.QUOTA_REJECTED;
+                boolean placed;
+                if (outcome.result()
+                    == ProceduralTreeIntegration.Result.PLACED) {
+                    placed = true;
+                    telemetry.treeV2Attempts.increment();
+                    telemetry.treeV2Placed.increment();
+                    telemetry.treeV2Quality[outcome.quality().ordinal()]
+                        .increment();
+                } else {
+                    if (outcome.result()
+                        != ProceduralTreeIntegration.Result.UNSUPPORTED) {
+                        telemetry.treeV2Attempts.increment();
+                        if (outcome.quality() != null) {
+                            telemetry.treeV2Quality[outcome.quality().ordinal()]
+                                .increment();
+                        }
+                        if (outcome.result()
+                            == ProceduralTreeIntegration.Result.COLLISION) {
+                            telemetry.treeV2Collisions.increment();
+                        } else if (outcome.result()
+                            == ProceduralTreeIntegration.Result.QUOTA_REJECTED) {
+                            telemetry.treeV2QuotaRejected.increment();
+                        } else if (outcome.result()
+                            == ProceduralTreeIntegration.Result.DISABLED) {
+                            telemetry.treeV2Disabled.increment();
+                        }
+                    }
+                    if (outcome.shouldFallback()) {
+                        if (outcome.result()
+                            != ProceduralTreeIntegration.Result.UNSUPPORTED) {
+                            telemetry.treeV2Fallback.increment();
+                        }
+                        placed = buildTree(level, base, shape, oldGrowth);
+                    } else {
+                        placed = false;
+                    }
+                }
                 Stage6Profiler.record(
                     Stage6Profiler.Phase.VEGETATION_BLOCK_PLACEMENT,
                     placementStarted
                 );
                 if (placed) {
                     telemetry.trees.increment();
-                } else {
+                } else if (!intentionallySkipped) {
                     telemetry.treeRejectedOther.increment();
                 }
             }
@@ -264,8 +392,16 @@ public final class VegetationProvincePass {
         int z
     ) {
         long samplingStarted = Stage6Profiler.start();
-        int surfaceY = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z) - 1;
+        int surfaceY = level.getHeight(
+            Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+            x,
+            z
+        ) - 1;
         if (surfaceY <= level.getMinBuildHeight() + 4) {
+            Stage6Profiler.record(
+                Stage6Profiler.Phase.VEGETATION_SAMPLING,
+                samplingStarted
+            );
             return null;
         }
         BlockPos surface = new BlockPos(x, surfaceY, z);
@@ -287,7 +423,10 @@ public final class VegetationProvincePass {
             - fields.analyticalTerrain(x - 4, z).surfaceY();
         double dz = fields.analyticalTerrain(x, z + 4).surfaceY()
             - fields.analyticalTerrain(x, z - 4).surfaceY();
-        double slope = Math.min(1.0, Math.sqrt(dx * dx + dz * dz) / 32.0);
+        double slope = Math.min(
+            1.0,
+            Math.sqrt(dx * dx + dz * dz) / 32.0
+        );
         SurfaceContext surfaceContext = SurfaceContextFactory.create(
             seed,
             x,
@@ -345,12 +484,20 @@ public final class VegetationProvincePass {
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
         for (int candidate = 0; candidate < 4; candidate++) {
             int x = minX + 2 + (int)Math.floor(
-                unit(seed, chunk.getPos().x, chunk.getPos().z,
-                    0xCA7E00L + candidate * 2L) * 12.0
+                unit(
+                    seed,
+                    chunk.getPos().x,
+                    chunk.getPos().z,
+                    0xCA7E00L + candidate * 2L
+                ) * 12.0
             );
             int z = minZ + 2 + (int)Math.floor(
-                unit(seed, chunk.getPos().x, chunk.getPos().z,
-                    0xCA7E01L + candidate * 2L) * 12.0
+                unit(
+                    seed,
+                    chunk.getPos().x,
+                    chunk.getPos().z,
+                    0xCA7E01L + candidate * 2L
+                ) * 12.0
             );
             telemetry.caveColumns.increment();
             int topY = Math.min(
@@ -363,57 +510,60 @@ public final class VegetationProvincePass {
             for (int y = level.getMinBuildHeight() + 8 + verticalOffset;
                  y <= topY;
                  y += 4) {
-                    cursor.set(x, y, z);
-                    String biomeId = level.getBiome(cursor).unwrapKey()
-                        .map(key -> key.location().toString())
-                        .orElse("");
-                    VegetationProfile profile =
-                        VegetationProfileCatalog.find(biomeId).orElse(null);
-                    if (profile == null) {
-                        if (!biomeId.isEmpty()
-                            && !biomeId.startsWith("minecraft:")) {
-                            telemetry.caveGeneric.increment();
-                            telemetry.firstCaves[3].compareAndSet(
-                                Long.MIN_VALUE, BlockPos.asLong(x, y, z)
-                            );
-                        }
-                        continue;
+                cursor.set(x, y, z);
+                String biomeId = level.getBiome(cursor).unwrapKey()
+                    .map(key -> key.location().toString())
+                    .orElse("");
+                VegetationProfile profile =
+                    VegetationProfileCatalog.find(biomeId).orElse(null);
+                if (profile == null) {
+                    if (!biomeId.isEmpty()
+                        && !biomeId.startsWith("minecraft:")) {
+                        telemetry.caveGeneric.increment();
+                        telemetry.firstCaves[3].compareAndSet(
+                            Long.MIN_VALUE,
+                            BlockPos.asLong(x, y, z)
+                        );
                     }
-                    if (profile.terrestrial()) {
-                        continue;
-                    }
-                    int caveIndex = switch (profile.family()) {
-                        case LUSH_CAVE -> 0;
-                        case DRIPSTONE_CAVE -> 1;
-                        case DEEP_DARK -> 2;
-                        default -> 3;
-                    };
-                    switch (caveIndex) {
-                        case 0 -> telemetry.caveLush.increment();
-                        case 1 -> telemetry.caveDripstone.increment();
-                        case 2 -> telemetry.caveDeepDark.increment();
-                        default -> telemetry.caveGeneric.increment();
-                    }
-                    telemetry.firstCaves[caveIndex].compareAndSet(
-                        Long.MIN_VALUE, BlockPos.asLong(x, y, z)
-                    );
-                    if (!level.isEmptyBlock(cursor)
-                        || level.getBlockState(cursor.below()).isAir()) {
-                        continue;
-                    }
-                    BlockState accent = switch (profile.family()) {
-                        case LUSH_CAVE -> Blocks.MOSS_CARPET.defaultBlockState();
-                        case DRIPSTONE_CAVE -> Blocks.POINTED_DRIPSTONE.defaultBlockState();
-                        case DEEP_DARK -> Blocks.SCULK_VEIN.defaultBlockState();
-                        default -> Blocks.AIR.defaultBlockState();
-                    };
-                    if (!accent.isAir()
-                        && unit(seed, x, z, y * 31L) < 0.42
-                        && accent.canSurvive(level, cursor)) {
-                        level.setBlock(cursor, accent, 2);
-                        telemetry.caves.increment();
-                    }
+                    continue;
                 }
+                if (profile.terrestrial()) {
+                    continue;
+                }
+                int caveIndex = switch (profile.family()) {
+                    case LUSH_CAVE -> 0;
+                    case DRIPSTONE_CAVE -> 1;
+                    case DEEP_DARK -> 2;
+                    default -> 3;
+                };
+                switch (caveIndex) {
+                    case 0 -> telemetry.caveLush.increment();
+                    case 1 -> telemetry.caveDripstone.increment();
+                    case 2 -> telemetry.caveDeepDark.increment();
+                    default -> telemetry.caveGeneric.increment();
+                }
+                telemetry.firstCaves[caveIndex].compareAndSet(
+                    Long.MIN_VALUE,
+                    BlockPos.asLong(x, y, z)
+                );
+                if (!level.isEmptyBlock(cursor)
+                    || level.getBlockState(cursor.below()).isAir()) {
+                    continue;
+                }
+                BlockState accent = switch (profile.family()) {
+                    case LUSH_CAVE -> Blocks.MOSS_CARPET.defaultBlockState();
+                    case DRIPSTONE_CAVE ->
+                        Blocks.POINTED_DRIPSTONE.defaultBlockState();
+                    case DEEP_DARK -> Blocks.SCULK_VEIN.defaultBlockState();
+                    default -> Blocks.AIR.defaultBlockState();
+                };
+                if (!accent.isAir()
+                    && unit(seed, x, z, y * 31L) < 0.42
+                    && accent.canSurvive(level, cursor)) {
+                    level.setBlock(cursor, accent, 2);
+                    telemetry.caves.increment();
+                }
+            }
         }
         Stage6Profiler.record(Stage6Profiler.Phase.CAVE_ACCENTS, caveStarted);
     }
@@ -485,7 +635,8 @@ public final class VegetationProvincePass {
             int layerRadius = dy == 1 ? Math.max(1, radius - 1) : radius;
             for (int dx = -layerRadius; dx <= layerRadius; dx++) {
                 for (int dz = -layerRadius; dz <= layerRadius; dz++) {
-                    if (dx * dx + dz * dz > layerRadius * layerRadius + 1) {
+                    if (dx * dx + dz * dz
+                        > layerRadius * layerRadius + 1) {
                         continue;
                     }
                     BlockPos position = crown.offset(dx, dy, dz);
@@ -505,11 +656,16 @@ public final class VegetationProvincePass {
         SurfaceContext surface = sample.context().surface();
         if (sample.context().waterAtSurface()) {
             telemetry.treeRejectedWater.increment();
-        } else if (Math.max(surface.riverMask(), surface.riverInfluence()) >= 0.10) {
+        } else if (Math.max(
+            surface.riverMask(),
+            surface.riverInfluence()
+        ) >= 0.10) {
             telemetry.treeRejectedRiver.increment();
-        } else if (surface.slope() >= sample.profile().maxTreeSlope() * 0.55) {
+        } else if (surface.slope()
+            >= sample.profile().maxTreeSlope() * 0.55) {
             telemetry.treeRejectedSlope.increment();
-        } else if (surface.surfaceY() >= sample.profile().treeLineY() - 28) {
+        } else if (surface.surfaceY()
+            >= sample.profile().treeLineY() - 28) {
             telemetry.treeRejectedAltitude.increment();
         } else {
             telemetry.treeRejectedOther.increment();
@@ -528,11 +684,11 @@ public final class VegetationProvincePass {
         if (surface.exposedSlope()) {
             return Province.ROCKY_SLOPE;
         }
-        if (surface.groundwater() > 0.68
-            || surface.wetBank()) {
+        if (surface.groundwater() > 0.68 || surface.wetBank()) {
             return Province.WET_LOWLAND;
         }
-        if (sample.context().clearingNoise() < sample.profile().clearingShare()) {
+        if (sample.context().clearingNoise()
+            < sample.profile().clearingShare()) {
             return Province.CLEARING;
         }
         if (sample.context().forestCore() > 0.72) {
@@ -544,19 +700,26 @@ public final class VegetationProvincePass {
         return Province.OPEN_VALLEY;
     }
 
-    private static String provinceSnapshot(Telemetry telemetry, boolean reset) {
+    private static String provinceSnapshot(
+        Telemetry telemetry,
+        boolean reset
+    ) {
         StringBuilder output = new StringBuilder();
         for (Province province : Province.values()) {
             output.append("vegetation.province.")
                 .append(province.name().toLowerCase(java.util.Locale.ROOT))
                 .append('=')
-                .append(value(telemetry.provinces[province.ordinal()], reset))
+                .append(value(
+                    telemetry.provinces[province.ordinal()],
+                    reset
+                ))
                 .append('\n');
             output.append("vegetation.province.")
                 .append(province.name().toLowerCase(java.util.Locale.ROOT))
                 .append(".first=")
                 .append(position(
-                    telemetry.firstProvinces[province.ordinal()], reset
+                    telemetry.firstProvinces[province.ordinal()],
+                    reset
                 ))
                 .append('\n');
         }
@@ -573,7 +736,8 @@ public final class VegetationProvincePass {
         if (flower) {
             return switch (profile.family()) {
                 case MEADOW -> Blocks.AZURE_BLUET.defaultBlockState();
-                case TROPICAL_HUMID, WETLAND -> Blocks.BLUE_ORCHID.defaultBlockState();
+                case TROPICAL_HUMID, WETLAND ->
+                    Blocks.BLUE_ORCHID.defaultBlockState();
                 default -> Blocks.DANDELION.defaultBlockState();
             };
         }
@@ -582,7 +746,10 @@ public final class VegetationProvincePass {
             SurfaceNoise.hash(seed, x, z, 0x6A0D1L),
             ids.length
         )];
-        return GROUND.getOrDefault(id, Blocks.SHORT_GRASS.defaultBlockState());
+        return GROUND.getOrDefault(
+            id,
+            Blocks.SHORT_GRASS.defaultBlockState()
+        );
     }
 
     private static int jitter(long seed, int x, int z, long salt) {
@@ -595,10 +762,14 @@ public final class VegetationProvincePass {
 
     private static Map<String, BlockState> groundStates() {
         Map<String, BlockState> result = new HashMap<>();
-        for (VegetationProfile profile : VegetationProfileCatalog.profiles().values()) {
+        for (VegetationProfile profile
+            : VegetationProfileCatalog.profiles().values()) {
             for (String id : profile.groundPalette()) {
                 BuiltInRegistries.BLOCK.getOptional(ResourceLocation.parse(id))
-                    .ifPresent(block -> result.put(id, block.defaultBlockState()));
+                    .ifPresent(block -> result.put(
+                        id,
+                        block.defaultBlockState()
+                    ));
             }
         }
         return Map.copyOf(result);
@@ -626,7 +797,16 @@ public final class VegetationProvincePass {
         private final LongAdder treeRejectedAltitude = new LongAdder();
         private final LongAdder treeRejectedDensity = new LongAdder();
         private final LongAdder treeRejectedOther = new LongAdder();
-        private final LongAdder[] provinces = new LongAdder[Province.values().length];
+        private final LongAdder treeV2Attempts = new LongAdder();
+        private final LongAdder treeV2Placed = new LongAdder();
+        private final LongAdder treeV2Collisions = new LongAdder();
+        private final LongAdder treeV2QuotaRejected = new LongAdder();
+        private final LongAdder treeV2Disabled = new LongAdder();
+        private final LongAdder treeV2Fallback = new LongAdder();
+        private final LongAdder[] treeV2Quality =
+            new LongAdder[TreeQualityTier.values().length];
+        private final LongAdder[] provinces =
+            new LongAdder[Province.values().length];
         private final AtomicLong[] firstProvinces =
             new AtomicLong[Province.values().length];
         private final LongAdder caveColumns = new LongAdder();
@@ -638,6 +818,9 @@ public final class VegetationProvincePass {
         private final AtomicLong[] firstCaves = new AtomicLong[4];
 
         private Telemetry() {
+            for (int index = 0; index < treeV2Quality.length; index++) {
+                treeV2Quality[index] = new LongAdder();
+            }
             for (int index = 0; index < provinces.length; index++) {
                 provinces[index] = new LongAdder();
                 firstProvinces[index] = new AtomicLong(Long.MIN_VALUE);

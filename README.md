@@ -39,10 +39,12 @@ Third-party attribution is recorded in
 Requirements: Java 21.
 
 ```powershell
-.\gradlew.bat build
+.\gradlew.bat clean build
 ```
 
-The built mod is written to `build/libs/`.
+The installable mod is written to `build/libs/`. Use the versioned
+`nexus_landscape-*.jar`; do not install sources, javadoc, or an older JAR left
+by a previous build.
 
 The opt-in development survey generates real full chunks, exports a biome and
 height overview, counts placed landmarks and can audit all 53 Overworld biomes.

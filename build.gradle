@@ -161,10 +161,142 @@ tasks.register('riverWidthPolicyTest', JavaExec) {
     mainClass = 'dev.nexusmc.landscape.worldgen.v2.hydrology.RiverWidthPolicySelfTest'
 }
 
+tasks.register('snowyAlpineVariabilityTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks deterministic snowy/alpine surface signature variation.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.surface.SnowyAlpineVariabilitySelfTest'
+}
+
+tasks.register('biomeReachabilityTest', JavaExec) {
+    group = 'verification'
+    description = 'Samples real Overworld biome routing and audits fallback masking.'
+    dependsOn classes
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.diagnostics.BiomeReachabilityAudit'
+}
+
+tasks.register('regionalLandmarkShapeTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks deterministic angular regional outcrop silhouettes.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.RegionalLandmarkShapeSelfTest'
+}
+
+tasks.register('treeModelFoundationTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks tree budgets, environment inputs, branch graphs and voxel models.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.tree.TreeModelFoundationSelfTest'
+}
+
+tasks.register('anatomicalPlanningTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks staged trunk, root and branch-family planning.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.tree.AnatomicalPlanningSelfTest'
+}
+
+tasks.register('coniferSpeciesEnvelopeTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks spruce/pine species separation and cheap placement envelopes.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.tree.ConiferSpeciesAndEnvelopeSelfTest'
+}
+
+tasks.register('treePerformanceTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks deterministic cache work reduction across tree species and quality tiers.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.tree.TreePerformanceSelfTest'
+}
+
+tasks.register('segmentRoleTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks explicit trunk, root, live, dead and secondary-leader segment roles.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.tree.SegmentRoleSelfTest'
+}
+
+tasks.register('windDeformationTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks deterministic wind deformation, directional asymmetry and conservative bounds.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.tree.WindDeformationSelfTest'
+}
+
+tasks.register('crownBiasMetricsTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks crown center-of-mass and leeward/windward bias measurements.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.tree.CrownBiasMetricsSelfTest'
+}
+
+tasks.register('treeRuntimeOutcomeTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks tree cache lookup classification and quota fallback semantics.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.tree.TreeRuntimeOutcomeSelfTest'
+}
+
+tasks.register('treeGenerationPipelineTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks unified deterministic tree generation and cache parity.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.tree.TreeGenerationPipelineSelfTest'
+}
+
+tasks.register('treeMaterialProfileTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks explicit species material ids and validation.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.tree.TreeMaterialProfileSelfTest'
+}
+
+tasks.register('treePlacementProbeTelemetryTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks placement probe aggregation, averages and reset behavior.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.tree.TreePlacementProbeTelemetrySelfTest'
+}
+
+tasks.register('alpha3ReadinessAudit') {
+    group = 'verification'
+    description = 'Runs the deterministic 0.8.0-alpha.3 worldgen integration contract.'
+    dependsOn climateRouterRangeTest, biomeReachabilityTest, regionalFieldTest,
+        stage6SurfaceTest, surfaceProfileInvariantTest,
+        surfaceSelectionTest, surfaceContextTest, surfaceNoiseTest,
+        snowyAlpineVariabilityTest,
+        stage6VegetationTest, riverWidthPolicyTest,
+        regionalLandmarkShapeTest, treeGenerationPipelineTest,
+        treeRuntimeOutcomeTest, treePerformanceTest, stage6ProfilerTest
+}
+
 tasks.named('check') {
-    dependsOn regionalFieldTest, stage6SurfaceTest, stage6VegetationTest,
+    dependsOn alpha3ReadinessAudit,
+        regionalFieldTest, stage6SurfaceTest, stage6VegetationTest,
         stage6CommandTest, boundedCacheTest, stage6ProfilerTest,
         surfaceNoiseTest, surfaceSelectionTest, surfaceContextTest,
-        surfaceProfileInvariantTest, climateRouterRangeTest,
-        riverWidthPolicyTest
+        surfaceProfileInvariantTest, snowyAlpineVariabilityTest,
+        climateRouterRangeTest,
+        biomeReachabilityTest,
+        riverWidthPolicyTest, regionalLandmarkShapeTest,
+        treeModelFoundationTest, anatomicalPlanningTest,
+        coniferSpeciesEnvelopeTest, treePerformanceTest, segmentRoleTest,
+        windDeformationTest, crownBiasMetricsTest, treeRuntimeOutcomeTest,
+        treeGenerationPipelineTest, treeMaterialProfileTest,
+        treePlacementProbeTelemetryTest
 }

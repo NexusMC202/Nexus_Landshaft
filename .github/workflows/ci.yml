@@ -54,3 +54,12 @@ jobs:
             !build/libs/*-javadoc.jar
           if-no-files-found: error
           retention-days: 14
+
+      - name: Upload deterministic tree previews
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tree-previews-${{ github.sha }}
+          path: build/tree-previews/*.json
+          if-no-files-found: error
+          retention-days: 14
