@@ -1,5 +1,9 @@
 # Nexus Landscape — Stage 6 manual QA
 
+For the current five-seed, long-distance and profiler workflow, use
+[`LIVE_QA_MULTI_SEED.md`](LIVE_QA_MULTI_SEED.md). The targeted coordinates
+below remain the regression scene catalog.
+
 Статус: **PARTIAL** до получения и проверки пользовательских screenshots.
 Stage 7 не входит в этот документ.
 
