@@ -61,6 +61,9 @@ public record TreePlacementEnvelope(
             case BASIC, MID -> 2;
             case HERO -> 3;
         };
+        if (species.branchLengthMultiplier() >= 1.25) {
+            canopyMargin++;
+        }
         radius += canopyMargin;
         radius = Math.max(2, Math.min(radius, quality.budget().maxHorizontalRadius()));
 
