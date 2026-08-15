@@ -4,6 +4,10 @@ This checklist is for new `nexus_landscape:nexus_v2` worlds on Minecraft
 1.21.1. Keep PR #5 in draft while collecting results. Use Java 21, cheats or
 operator permission level 2, shaders off, and `F3+G` for chunk borders.
 
+Build the test mod with `.\gradlew.bat clean build` and install only
+`build/libs/nexus_landscape-0.8.0-alpha.1.jar`. Remove any older Nexus Landscape
+JAR from the instance first.
+
 Start Minecraft with profiling enabled:
 
 ```powershell
