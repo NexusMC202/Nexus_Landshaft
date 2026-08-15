@@ -16,6 +16,7 @@ public final class VegetationProfileSelfTest {
 
     public static void main(String[] arguments) {
         verifyCoverage();
+        verifyCaveFamilyCoverage();
         verifyDensityContracts();
         verifyExclusions();
         verifyProceduralConiferSiteContract();
@@ -57,6 +58,34 @@ public final class VegetationProfileSelfTest {
                     + profile.biomeId()
             );
         }
+    }
+
+    private static void verifyCaveFamilyCoverage() {
+        requireCaveFamily(
+            "minecraft:lush_caves",
+            VegetationProfile.Family.LUSH_CAVE
+        );
+        requireCaveFamily(
+            "minecraft:dripstone_caves",
+            VegetationProfile.Family.DRIPSTONE_CAVE
+        );
+        requireCaveFamily(
+            "minecraft:deep_dark",
+            VegetationProfile.Family.DEEP_DARK
+        );
+    }
+
+    private static void requireCaveFamily(
+        String biomeId,
+        VegetationProfile.Family family
+    ) {
+        VegetationProfile profile = VegetationProfileCatalog.require(biomeId);
+        require(profile.family() == family,
+            biomeId + " mapped to wrong cave family: " + profile.family());
+        require(!profile.terrestrial(),
+            biomeId + " cave profile became terrestrial");
+        require(!profile.intentionalAbsence().isBlank(),
+            biomeId + " cave profile lacks placement ownership");
     }
 
     private static void verifyExclusions() {

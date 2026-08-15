@@ -257,8 +257,20 @@ tasks.register('treePlacementProbeTelemetryTest', JavaExec) {
     mainClass = 'dev.nexusmc.landscape.worldgen.v2.tree.TreePlacementProbeTelemetrySelfTest'
 }
 
+tasks.register('alpha3ReadinessAudit') {
+    group = 'verification'
+    description = 'Runs the deterministic 0.8.0-alpha.3 worldgen integration contract.'
+    dependsOn climateRouterRangeTest, regionalFieldTest,
+        stage6SurfaceTest, surfaceProfileInvariantTest,
+        surfaceSelectionTest, surfaceContextTest, surfaceNoiseTest,
+        stage6VegetationTest, riverWidthPolicyTest,
+        regionalLandmarkShapeTest, treeGenerationPipelineTest,
+        treeRuntimeOutcomeTest, treePerformanceTest, stage6ProfilerTest
+}
+
 tasks.named('check') {
-    dependsOn regionalFieldTest, stage6SurfaceTest, stage6VegetationTest,
+    dependsOn alpha3ReadinessAudit,
+        regionalFieldTest, stage6SurfaceTest, stage6VegetationTest,
         stage6CommandTest, boundedCacheTest, stage6ProfilerTest,
         surfaceNoiseTest, surfaceSelectionTest, surfaceContextTest,
         surfaceProfileInvariantTest, climateRouterRangeTest,
