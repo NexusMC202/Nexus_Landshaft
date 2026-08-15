@@ -161,6 +161,14 @@ tasks.register('riverWidthPolicyTest', JavaExec) {
     mainClass = 'dev.nexusmc.landscape.worldgen.v2.hydrology.RiverWidthPolicySelfTest'
 }
 
+tasks.register('snowyAlpineVariabilityTest', JavaExec) {
+    group = 'verification'
+    description = 'Checks deterministic snowy/alpine surface signature variation.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.nexusmc.landscape.worldgen.v2.surface.SnowyAlpineVariabilitySelfTest'
+}
+
 tasks.register('biomeReachabilityTest', JavaExec) {
     group = 'verification'
     description = 'Samples real Overworld biome routing and audits fallback masking.'
@@ -271,6 +279,7 @@ tasks.register('alpha3ReadinessAudit') {
     dependsOn climateRouterRangeTest, biomeReachabilityTest, regionalFieldTest,
         stage6SurfaceTest, surfaceProfileInvariantTest,
         surfaceSelectionTest, surfaceContextTest, surfaceNoiseTest,
+        snowyAlpineVariabilityTest,
         stage6VegetationTest, riverWidthPolicyTest,
         regionalLandmarkShapeTest, treeGenerationPipelineTest,
         treeRuntimeOutcomeTest, treePerformanceTest, stage6ProfilerTest
@@ -281,7 +290,8 @@ tasks.named('check') {
         regionalFieldTest, stage6SurfaceTest, stage6VegetationTest,
         stage6CommandTest, boundedCacheTest, stage6ProfilerTest,
         surfaceNoiseTest, surfaceSelectionTest, surfaceContextTest,
-        surfaceProfileInvariantTest, climateRouterRangeTest,
+        surfaceProfileInvariantTest, snowyAlpineVariabilityTest,
+        climateRouterRangeTest,
         biomeReachabilityTest,
         riverWidthPolicyTest, regionalLandmarkShapeTest,
         treeModelFoundationTest, anatomicalPlanningTest,
